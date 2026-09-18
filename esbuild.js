@@ -3,19 +3,28 @@ const fs = require("fs");
 const path = require("path");
 const JSZip = require("jszip");
 
-const isWatch = process.argv.includes("--watch");
 const isPackage = process.argv.includes("--package") || true;
+
+function addDirectoryToZip(zip, folderPath, zipFolder) {
+  if (!fs.existsSync(folderPath)) return;
+  const items = fs.readdirSync(folderPath);
+  for (const item of items) {
+    const fullPath = path.join(folderPath, item);
+    if (fs.statSync(fullPath).isDirectory()) {
+      const subZip = zipFolder.folder(item);
+      addDirectoryToZip(zip, fullPath, subZip);
+    } else {
+      zipFolder.file(item, fs.readFileSync(fullPath));
+    }
+  }
+}
 
 async function build() {
   console.log("[PaperPilot] Building TypeScript bundle with esbuild...");
 
-  // Ensure addon and build directories exist
-  if (!fs.existsSync("addon")) {
-    fs.mkdirSync("addon", { recursive: true });
-  }
-  if (!fs.existsSync("build")) {
-    fs.mkdirSync("build", { recursive: true });
-  }
+  // Ensure output directories exist
+  if (!fs.existsSync("addon")) fs.mkdirSync("addon", { recursive: true });
+  if (!fs.existsSync("build")) fs.mkdirSync("build", { recursive: true });
 
   await esbuild.build({
     entryPoints: ["src/index.ts"],
@@ -24,7 +33,7 @@ async function build() {
     target: "firefox115",
     outfile: "addon/index.js",
     sourcemap: "inline",
-    external: ["ChromeUtils"],
+    external: ["ChromeUtils", "Services", "Zotero"],
     define: {
       "process.env.NODE_ENV": '"production"',
     },
@@ -36,18 +45,18 @@ async function build() {
     console.log("[PaperPilot] Packaging .xpi bundle for Zotero 7-10...");
     const zip = new JSZip();
 
-    // Add manifest.json and bootstrap.js
+    // 1. Root files
     zip.file("manifest.json", fs.readFileSync("manifest.json"));
     zip.file("bootstrap.js", fs.readFileSync("bootstrap.js"));
 
-    // Add addon directory files
-    const addonFiles = fs.readdirSync("addon");
+    // 2. Add addon folder
     const addonFolder = zip.folder("addon");
-    for (const file of addonFiles) {
-      const filePath = path.join("addon", file);
-      if (fs.statSync(filePath).isFile()) {
-        addonFolder.file(file, fs.readFileSync(filePath));
-      }
+    addDirectoryToZip(zip, "addon", addonFolder);
+
+    // 3. Add chrome folder (preferences.xhtml & preferences.js)
+    if (fs.existsSync("chrome")) {
+      const chromeFolder = zip.folder("chrome");
+      addDirectoryToZip(zip, "chrome", chromeFolder);
     }
 
     const content = await zip.generateAsync({

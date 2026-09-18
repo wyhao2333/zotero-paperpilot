@@ -1,6 +1,6 @@
 {
   "name": "zotero-paperpilot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Smart Selection Translation, AI Domain Interpretation & Full-text Copilot for Zotero 7-10",
   "main": "addon/index.js",
   "scripts": {
@@ -26,5 +26,8 @@
     "esbuild": "^0.25.0",
     "jszip": "^3.10.1",
     "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "zotero-plugin-toolkit": "^5.2.0"
   }
 }

@@ -1,0 +1,97 @@
+<vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      xmlns:html="http://www.w3.org/1999/xhtml"
+      onload="PaperPilot_Preferences.init(window)">
+
+  <groupbox>
+    <label><html:h2 style="font-size:15px; font-weight:600; margin:4px 0 8px 0; color:#2563eb;">🌐 划词翻译设置</html:h2></label>
+    
+    <hbox align="center" style="margin: 6px 0;">
+      <label value="默认翻译引擎:" style="min-width: 120px; font-weight:500;" />
+      <html:select id="pp-pref-trans-service" style="min-width: 260px; padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
+        <html:option value="google">Google 免费翻译 (GTX 免 Key 毫秒级)</html:option>
+        <html:option value="bing">Bing 免费翻译</html:option>
+        <html:option value="ai">AI 大模型翻译 (使用下方配置的模型)</html:option>
+      </html:select>
+    </hbox>
+
+    <hbox align="center" style="margin: 6px 0;">
+      <label value="目标翻译语言:" style="min-width: 120px; font-weight:500;" />
+      <html:select id="pp-pref-target-lang" style="min-width: 260px; padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
+        <html:option value="zh-CN">简体中文 (zh-CN)</html:option>
+        <html:option value="zh-TW">繁体中文 (zh-TW)</html:option>
+        <html:option value="en">English (en)</html:option>
+        <html:option value="ja">日本語 (ja)</html:option>
+      </html:select>
+    </hbox>
+
+    <hbox align="center" style="margin: 8px 0;">
+      <html:input type="checkbox" id="pp-pref-auto-translate" style="cursor:pointer;" />
+      <label value="划词后立即自动翻译并在划词栏弹出结果" style="margin-left: 6px; cursor:pointer;" />
+    </hbox>
+  </groupbox>
+
+  <groupbox style="margin-top: 10px;">
+    <label><html:h2 style="font-size:15px; font-weight:600; margin:4px 0 8px 0; color:#2563eb;">🤖 AI 服务商与自定义 API 接口</html:h2></label>
+
+    <hbox align="center" style="margin: 6px 0;">
+      <label value="当前 AI 服务商:" style="min-width: 120px; font-weight:500;" />
+      <html:select id="pp-pref-ai-provider" style="min-width: 260px; padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
+        <html:option value="zhipu">🇨🇳 智谱清言 (GLM)</html:option>
+        <html:option value="deepseek">🇨🇳 DeepSeek</html:option>
+        <html:option value="openai">🌐 OpenAI (ChatGPT)</html:option>
+        <html:option value="moonshot">🇨🇳 月之暗面 (Moonshot / Kimi)</html:option>
+        <html:option value="qwen">🇨🇳 通义千问 (Qwen)</html:option>
+        <html:option value="siliconflow">🇨🇳 硅基流动 (SiliconFlow)</html:option>
+        <html:option value="ollama">💻 本地 Ollama</html:option>
+        <html:option value="custom">🛠️ 自定义 API 接口 (Custom Endpoint)</html:option>
+      </html:select>
+    </hbox>
+
+    <hbox align="center" style="margin: 6px 0;">
+      <label value="API Key (密钥):" style="min-width: 120px; font-weight:500;" />
+      <html:input type="password" id="pp-pref-api-key" placeholder="在此填入对应服务商的 API Key" style="flex: 1; padding: 4px 6px; border-radius: 4px; border: 1px solid #ccc;" />
+    </hbox>
+
+    <hbox align="center" style="margin: 6px 0;">
+      <label value="Base URL (接口地址):" style="min-width: 120px; font-weight:500;" />
+      <html:input type="text" id="pp-pref-base-url" placeholder="https://..." style="flex: 1; padding: 4px 6px; border-radius: 4px; border: 1px solid #ccc;" />
+    </hbox>
+
+    <hbox align="center" style="margin: 6px 0;">
+      <label value="模型名称 (Model):" style="min-width: 120px; font-weight:500;" />
+      <html:input type="text" id="pp-pref-model" placeholder="e.g. glm-4-flash, deepseek-chat" style="flex: 1; padding: 4px 6px; border-radius: 4px; border: 1px solid #ccc;" />
+    </hbox>
+
+    <hbox align="center" style="margin: 8px 0; gap: 10px;">
+      <button id="pp-pref-btn-test" style="padding: 4px 12px; cursor:pointer;">⚡ 测试 API 连接</button>
+      <label id="pp-pref-test-result" style="font-size: 12px; color: #666;"></label>
+    </hbox>
+  </groupbox>
+
+  <groupbox style="margin-top: 10px;">
+    <label><html:h2 style="font-size:15px; font-weight:600; margin:4px 0 8px 0; color:#2563eb;">💡 学术解读提示词设置</html:h2></label>
+
+    <hbox align="center" style="margin: 6px 0;">
+      <label value="默认解读领域:" style="min-width: 120px; font-weight:500;" />
+      <html:select id="pp-pref-default-domain" style="min-width: 260px; padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
+        <html:option value="general">通用学术 (跨学科 - 默认)</html:option>
+        <html:option value="cs_ai">计算机与人工智能 (CS/AI)</html:option>
+        <html:option value="med_bio">医学与生物生命科学 (Med/Bio)</html:option>
+        <html:option value="econ_social">经济金融与人文社科</html:option>
+        <html:option value="engineering">工程与物理科学</html:option>
+        <html:option value="custom">自定义领域 Prompt</html:option>
+      </html:select>
+    </hbox>
+
+    <vbox style="margin-top: 6px;">
+      <label value="自定义解读 Prompt 模板 (使用 {text} 作为选段占位符):" style="font-size:12px; color:#555; margin-bottom: 4px;" />
+      <html:textarea id="pp-pref-custom-prompt" rows="3" style="width: 100%; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-family: monospace; font-size: 12px;"></html:textarea>
+    </vbox>
+  </groupbox>
+
+  <hbox align="center" style="margin-top: 12px; gap: 12px;">
+    <button id="pp-pref-btn-save" style="padding: 6px 18px; font-weight: 600; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">💾 保存设置</button>
+    <label id="pp-pref-save-status" style="color: #16a34a; font-weight: bold; display: none;">✅ 配置已保存并即时生效！</label>
+  </hbox>
+
+</vbox>

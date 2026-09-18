@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "PaperPilot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Smart Selection Translation, AI Domain Interpretation & Full-text Copilot for Zotero 7-10",
   "icons": {
     "48": "addon/icon.svg"

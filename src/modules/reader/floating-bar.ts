@@ -4,147 +4,191 @@ import { TranslatorManager } from "../translator";
 import { PreferenceManager } from "../../core/preferences";
 
 export class FloatingBarManager {
-  private static activeBar: HTMLElement | null = null;
   private static activePopup: HTMLElement | null = null;
 
-  static attachToReaderWindow(readerWin: Window, doc: Document): void {
-    if (!doc || !doc.body) return;
+  /**
+   * Called by Zotero.Reader.registerEventListener("renderTextSelectionPopup", ...)
+   */
+  static handleNativeSelectionPopup(event: any): void {
+    const { reader, doc, params, append } = event;
+    if (!doc) return;
 
-    doc.addEventListener("mouseup", async (e: MouseEvent) => {
-      // Delay slightly for selection to settle
-      setTimeout(async () => {
-        const sel = readerWin.getSelection();
-        const rawText = sel ? sel.toString() : "";
-        const cleanText = SelectionHelper.cleanPdfText(rawText);
+    const rawText = params?.annotation?.text || (reader?.getSelectedText ? reader.getSelectedText() : "");
+    const cleanText = SelectionHelper.cleanPdfText(rawText);
 
-        if (!cleanText || cleanText.length < 2) {
-          this.hide();
-          return;
-        }
+    if (!cleanText || cleanText.length < 2) return;
 
-        // If click was inside our own floating bar or popup, do not reposition
-        if (
-          (this.activeBar && this.activeBar.contains(e.target as Node)) ||
-          (this.activePopup && this.activePopup.contains(e.target as Node))
-        ) {
-          return;
-        }
-
-        const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
-        if (!range) return;
-
-        const rect = range.getBoundingClientRect();
-        this.show(doc, rect, cleanText);
-
-        // Check if auto-translate is enabled
-        if (PreferenceManager.get().autoTranslateSelection) {
-          this.triggerTranslate(doc, rect, cleanText);
-        }
-      }, 50);
-    });
-
-    doc.addEventListener("mousedown", (e: MouseEvent) => {
-      if (
-        (this.activeBar && this.activeBar.contains(e.target as Node)) ||
-        (this.activePopup && this.activePopup.contains(e.target as Node))
-      ) {
-        return;
-      }
-      this.hide();
-    });
-  }
-
-  static show(doc: Document, rect: DOMRect, text: string): void {
-    this.hideBar();
-
-    const bar = doc.createElement("div");
-    bar.className = "paperpilot-floating-bar";
-
-    const top = Math.max(10, rect.top - 42 + doc.documentElement.scrollTop);
-    const left = Math.max(10, rect.left + rect.width / 2 - 110 + doc.documentElement.scrollLeft);
-
-    bar.style.top = `${top}px`;
-    bar.style.left = `${left}px`;
-
-    bar.innerHTML = `
-      <button class="paperpilot-btn primary" id="pp-btn-translate">🌐 翻译</button>
-      <button class="paperpilot-btn" id="pp-btn-interpret">💡 解读</button>
-      <button class="paperpilot-btn" id="pp-btn-ask">❓ 提问</button>
+    // Create a compact PaperPilot action group to append into the native popup
+    const btnGroup = doc.createElement("div");
+    btnGroup.className = "paperpilot-native-popup-group";
+    btnGroup.style.cssText = `
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-left: 6px;
+      padding: 2px 4px;
+      border-left: 1px solid rgba(128,128,128,0.3);
+      vertical-align: middle;
     `;
 
-    doc.body.appendChild(bar);
-    this.activeBar = bar;
+    // 1. Translate Button
+    const btnTranslate = doc.createElement("button");
+    btnTranslate.textContent = "🌐 翻译";
+    btnTranslate.title = "PaperPilot 划词翻译";
+    btnTranslate.style.cssText = `
+      background: #2563eb;
+      color: #ffffff;
+      border: none;
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      line-height: 18px;
+    `;
 
-    bar.querySelector("#pp-btn-translate")?.addEventListener("click", (e) => {
+    // 2. Interpret Button
+    const btnInterpret = doc.createElement("button");
+    btnInterpret.textContent = "💡 解读";
+    btnInterpret.title = "PaperPilot 领域深度解读";
+    btnInterpret.style.cssText = `
+      background: #f1f5f9;
+      color: #1e293b;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      line-height: 18px;
+    `;
+
+    // 3. Ask Button
+    const btnAsk = doc.createElement("button");
+    btnAsk.textContent = "❓ 提问";
+    btnAsk.title = "基于选段向 AI 提问";
+    btnAsk.style.cssText = `
+      background: #f1f5f9;
+      color: #1e293b;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      line-height: 18px;
+    `;
+
+    btnGroup.appendChild(btnTranslate);
+    btnGroup.appendChild(btnInterpret);
+    btnGroup.appendChild(btnAsk);
+
+    // Append to native popup
+    if (typeof append === "function") {
+      append(btnGroup);
+    }
+
+    // Actions
+    btnTranslate.addEventListener("click", async (e: MouseEvent) => {
       e.stopPropagation();
-      this.triggerTranslate(doc, rect, text);
+      e.preventDefault();
+      await this.showTranslationPopup(doc, cleanText, btnTranslate);
     });
 
-    bar.querySelector("#pp-btn-interpret")?.addEventListener("click", (e) => {
+    btnInterpret.addEventListener("click", (e: MouseEvent) => {
       e.stopPropagation();
-      this.hide();
-      EventBus.emit("action:interpret", { text });
+      e.preventDefault();
+      this.hidePopup();
+      EventBus.emit("action:interpret", { text: cleanText });
     });
 
-    bar.querySelector("#pp-btn-ask")?.addEventListener("click", (e) => {
+    btnAsk.addEventListener("click", (e: MouseEvent) => {
       e.stopPropagation();
-      this.hide();
-      EventBus.emit("action:ask", { quote: text });
+      e.preventDefault();
+      this.hidePopup();
+      EventBus.emit("action:ask", { quote: cleanText });
     });
-  }
 
-  static async triggerTranslate(doc: Document, rect: DOMRect, text: string): Promise<void> {
-    this.showPopup(doc, rect, "正在翻译中...", text);
-
-    try {
-      const translated = await TranslatorManager.translate(text);
-      this.showPopup(doc, rect, translated, text);
-      EventBus.emit("action:translated", { source: text, translated });
-    } catch (err: any) {
-      this.showPopup(doc, rect, `翻译失败: ${err.message || err}`, text);
+    // Auto-translate if user enabled it
+    if (PreferenceManager.get().autoTranslateSelection) {
+      setTimeout(() => {
+        this.showTranslationPopup(doc, cleanText, btnTranslate);
+      }, 100);
     }
   }
 
-  static showPopup(doc: Document, rect: DOMRect, content: string, sourceText: string): void {
+  static async showTranslationPopup(doc: Document, text: string, anchorEl: HTMLElement): Promise<void> {
     this.hidePopup();
 
     const popup = doc.createElement("div");
     popup.className = "paperpilot-popup-card";
+    popup.style.cssText = `
+      position: absolute;
+      z-index: 999999;
+      width: 320px;
+      max-width: 90vw;
+      background: #ffffff;
+      color: #1e293b;
+      border: 1px solid #cbd5e1;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.5;
+    `;
 
-    const top = rect.bottom + 10 + doc.documentElement.scrollTop;
-    const left = Math.max(10, Math.min(rect.left + doc.documentElement.scrollLeft, doc.documentElement.clientWidth - 340));
+    // Position popup below anchor button
+    const rect = anchorEl.getBoundingClientRect();
+    const top = rect.bottom + 8 + (doc.documentElement.scrollTop || doc.body.scrollTop || 0);
+    const left = Math.max(10, Math.min(rect.left, doc.documentElement.clientWidth - 340));
 
     popup.style.top = `${top}px`;
     popup.style.left = `${left}px`;
 
     popup.innerHTML = `
-      <div class="paperpilot-card-header">
-        <span>PaperPilot 翻译</span>
-        <button class="paperpilot-btn" id="pp-btn-copy" style="padding:2px 6px; font-size:11px;">📋 复制</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:4px; margin-bottom:6px; font-weight:600; font-size:11px; color:#64748b;">
+        <span>PaperPilot 译文</span>
+        <div style="display:flex; gap:6px;">
+          <button id="pp-popup-copy" style="background:transparent; border:none; color:#2563eb; cursor:pointer; font-size:11px;">📋 复制</button>
+          <button id="pp-popup-close" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:12px; font-weight:bold;">✕</button>
+        </div>
       </div>
-      <div class="paperpilot-card-body">${this.escapeHtml(content)}</div>
+      <div id="pp-popup-body" style="max-height:180px; overflow-y:auto; word-break:break-word;">
+        <em>正在翻译中...</em>
+      </div>
     `;
-
-    popup.querySelector("#pp-btn-copy")?.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        navigator.clipboard.writeText(content);
-      }
-      const copyBtn = popup.querySelector("#pp-btn-copy") as HTMLButtonElement;
-      if (copyBtn) {
-        copyBtn.textContent = "已复制!";
-        setTimeout(() => (copyBtn.textContent = "📋 复制"), 1500);
-      }
-    });
 
     doc.body.appendChild(popup);
     this.activePopup = popup;
-  }
 
-  static hideBar(): void {
-    if (this.activeBar && this.activeBar.parentNode) {
-      this.activeBar.parentNode.removeChild(this.activeBar);
-      this.activeBar = null;
+    popup.querySelector("#pp-popup-close")?.addEventListener("click", () => {
+      this.hidePopup();
+    });
+
+    try {
+      const translated = await TranslatorManager.translate(text);
+      const bodyEl = popup.querySelector("#pp-popup-body");
+      if (bodyEl) {
+        bodyEl.textContent = translated;
+      }
+
+      popup.querySelector("#pp-popup-copy")?.addEventListener("click", () => {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(translated);
+          const copyBtn = popup.querySelector("#pp-popup-copy") as HTMLButtonElement;
+          if (copyBtn) {
+            copyBtn.textContent = "已复制!";
+            setTimeout(() => (copyBtn.textContent = "📋 复制"), 1500);
+          }
+        }
+      });
+
+      EventBus.emit("action:translated", { source: text, translated });
+    } catch (err: any) {
+      const bodyEl = popup.querySelector("#pp-popup-body");
+      if (bodyEl) {
+        bodyEl.textContent = `翻译失败: ${err.message || err}`;
+      }
     }
   }
 
@@ -156,16 +200,6 @@ export class FloatingBarManager {
   }
 
   static hide(): void {
-    this.hideBar();
     this.hidePopup();
-  }
-
-  private static escapeHtml(str: string): string {
-    return str
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
   }
 }

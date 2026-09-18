@@ -20,26 +20,31 @@ function addDirectoryToZip(zip, folderPath, zipFolder) {
 }
 
 async function build() {
-  console.log("[PaperPilot] Building TypeScript bundle with esbuild...");
+  console.log("[PaperPilot] Building IIFE bundle with esbuild for Zotero 7-10...");
 
   // Ensure output directories exist
   if (!fs.existsSync("addon")) fs.mkdirSync("addon", { recursive: true });
+  if (!fs.existsSync("chrome/content/scripts")) fs.mkdirSync("chrome/content/scripts", { recursive: true });
   if (!fs.existsSync("build")) fs.mkdirSync("build", { recursive: true });
 
   await esbuild.build({
     entryPoints: ["src/index.ts"],
     bundle: true,
-    format: "esm",
+    format: "iife",
+    globalName: "PaperPilotBundle",
     target: "firefox115",
-    outfile: "addon/index.js",
-    sourcemap: "inline",
+    outfile: "chrome/content/scripts/index.js",
+    sourcemap: false,
     external: ["ChromeUtils", "Services", "Zotero"],
     define: {
       "process.env.NODE_ENV": '"production"',
     },
   });
 
-  console.log("[PaperPilot] TypeScript compilation successful -> addon/index.js");
+  // Also copy to addon/index.js for dual fallback
+  fs.copyFileSync("chrome/content/scripts/index.js", "addon/index.js");
+
+  console.log("[PaperPilot] IIFE bundle generated -> chrome/content/scripts/index.js & addon/index.js");
 
   if (isPackage) {
     console.log("[PaperPilot] Packaging .xpi bundle for Zotero 7-10...");
@@ -53,7 +58,7 @@ async function build() {
     const addonFolder = zip.folder("addon");
     addDirectoryToZip(zip, "addon", addonFolder);
 
-    // 3. Add chrome folder (preferences.xhtml & preferences.js)
+    // 3. Add chrome folder (preferences.xhtml, preferences.js, scripts/index.js)
     if (fs.existsSync("chrome")) {
       const chromeFolder = zip.folder("chrome");
       addDirectoryToZip(zip, "chrome", chromeFolder);

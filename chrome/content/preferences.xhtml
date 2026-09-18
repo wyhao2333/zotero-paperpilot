@@ -1,22 +1,24 @@
 <vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
       xmlns:html="http://www.w3.org/1999/xhtml"
-      onload="PaperPilot_Preferences.init(window)">
+      onload="if (typeof PaperPilot_Preferences !== 'undefined') { PaperPilot_Preferences.init(window); } else if (window.PaperPilot_Preferences) { window.PaperPilot_Preferences.init(window); }">
 
   <groupbox>
     <label><html:h2 style="font-size:15px; font-weight:600; margin:4px 0 8px 0; color:#2563eb;">🌐 划词翻译设置</html:h2></label>
     
     <hbox align="center" style="margin: 6px 0;">
       <label value="默认翻译引擎:" style="min-width: 120px; font-weight:500;" />
-      <html:select id="pp-pref-trans-service" style="min-width: 260px; padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
+      <html:select id="pp-pref-trans-service" style="min-width: 320px; padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
+        <html:option value="mymemory">✨ MyMemory 学术翻译 (免 Key，国内直连推荐)</html:option>
         <html:option value="google">Google 免费翻译 (GTX 免 Key 毫秒级)</html:option>
         <html:option value="bing">Bing 免费翻译</html:option>
-        <html:option value="ai">AI 大模型翻译 (使用下方配置的模型)</html:option>
+        <html:option value="youdao">有道词典 (国内直连查词)</html:option>
+        <html:option value="ai">🤖 AI 大模型翻译 (基于下方配置的大模型)</html:option>
       </html:select>
     </hbox>
 
     <hbox align="center" style="margin: 6px 0;">
       <label value="目标翻译语言:" style="min-width: 120px; font-weight:500;" />
-      <html:select id="pp-pref-target-lang" style="min-width: 260px; padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
+      <html:select id="pp-pref-target-lang" style="min-width: 320px; padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
         <html:option value="zh-CN">简体中文 (zh-CN)</html:option>
         <html:option value="zh-TW">繁体中文 (zh-TW)</html:option>
         <html:option value="en">English (en)</html:option>
@@ -35,7 +37,7 @@
 
     <hbox align="center" style="margin: 6px 0;">
       <label value="当前 AI 服务商:" style="min-width: 120px; font-weight:500;" />
-      <html:select id="pp-pref-ai-provider" style="min-width: 260px; padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
+      <html:select id="pp-pref-ai-provider" style="min-width: 320px; padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
         <html:option value="zhipu">🇨🇳 智谱清言 (GLM)</html:option>
         <html:option value="deepseek">🇨🇳 DeepSeek</html:option>
         <html:option value="openai">🌐 OpenAI (ChatGPT)</html:option>
@@ -73,7 +75,7 @@
 
     <hbox align="center" style="margin: 6px 0;">
       <label value="默认解读领域:" style="min-width: 120px; font-weight:500;" />
-      <html:select id="pp-pref-default-domain" style="min-width: 260px; padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
+      <html:select id="pp-pref-default-domain" style="min-width: 320px; padding: 4px; border-radius: 4px; border: 1px solid #ccc;">
         <html:option value="general">通用学术 (跨学科 - 默认)</html:option>
         <html:option value="cs_ai">计算机与人工智能 (CS/AI)</html:option>
         <html:option value="med_bio">医学与生物生命科学 (Med/Bio)</html:option>
@@ -89,9 +91,9 @@
     </vbox>
   </groupbox>
 
-  <hbox align="center" style="margin-top: 12px; gap: 12px;">
-    <button id="pp-pref-btn-save" style="padding: 6px 18px; font-weight: 600; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">💾 保存设置</button>
-    <label id="pp-pref-save-status" style="color: #16a34a; font-weight: bold; display: none;">✅ 配置已保存并即时生效！</label>
+  <hbox align="center" style="margin-top: 14px; gap: 12px;">
+    <button id="pp-pref-btn-save" style="padding: 6px 22px; font-size:13px; font-weight: 600; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">💾 保存设置</button>
+    <label id="pp-pref-save-status" style="color: #16a34a; font-weight: bold; font-size:13px; display: none;">✅ 配置已保存并即时生效！</label>
   </hbox>
 
 </vbox>

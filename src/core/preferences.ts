@@ -1,7 +1,9 @@
 import { AIProviderConfig, DomainType } from "../types/zotero";
 
+export type TranslationServiceType = "mymemory" | "google" | "bing" | "youdao" | "ai";
+
 export interface PluginPreferences {
-  translationService: "google" | "bing" | "ai";
+  translationService: TranslationServiceType;
   targetLanguage: string;
   autoTranslateSelection: boolean;
   selectedAIProvider: string;
@@ -79,7 +81,7 @@ export const DEFAULT_AI_PROVIDERS: Record<string, AIProviderConfig> = {
 };
 
 export const DEFAULT_PREFS: PluginPreferences = {
-  translationService: "google",
+  translationService: "mymemory",
   targetLanguage: "zh-CN",
   autoTranslateSelection: false,
   selectedAIProvider: "zhipu",
@@ -106,6 +108,7 @@ export class PreferenceManager {
               ...(parsed.aiProviders || {}),
             },
           };
+          dump("[PaperPilot] PreferenceManager loaded prefs from Zotero.Prefs\n");
         }
       }
     } catch (e) {
@@ -125,6 +128,7 @@ export class PreferenceManager {
     try {
       if (typeof Zotero !== "undefined" && Zotero.Prefs) {
         Zotero.Prefs.set(this.PREF_KEY, JSON.stringify(this.cachedPrefs), true);
+        dump("[PaperPilot] PreferenceManager saved prefs to Zotero.Prefs\n");
       }
     } catch (e) {
       dump(`[PaperPilot] Failed to save preferences: ${e}\n`);

@@ -7,6 +7,7 @@ build/
 dist/
 addon/index.js
 addon/index.js.map
+chrome/content/scripts/
 *.xpi
 
 # OS / Editor files

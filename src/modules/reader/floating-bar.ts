@@ -5,116 +5,264 @@ import { PreferenceManager } from "../../core/preferences";
 
 export class FloatingBarManager {
   private static activePopup: HTMLElement | null = null;
+  private static activeFloatingBar: HTMLElement | null = null;
 
   /**
-   * Called by Zotero.Reader.registerEventListener("renderTextSelectionPopup", ...)
+   * 1. Official Zotero Reader selection popup hook
    */
   static handleNativeSelectionPopup(event: any): void {
-    const { reader, doc, params, append } = event;
-    if (!doc) return;
+    try {
+      const { reader, doc, params, append } = event;
+      if (!doc) return;
 
-    const rawText = params?.annotation?.text || (reader?.getSelectedText ? reader.getSelectedText() : "");
-    const cleanText = SelectionHelper.cleanPdfText(rawText);
+      const rawText =
+        params?.annotation?.text ||
+        (reader?.getSelectedText ? reader.getSelectedText() : "") ||
+        "";
+      const cleanText = SelectionHelper.cleanPdfText(rawText);
 
-    if (!cleanText || cleanText.length < 2) return;
+      if (!cleanText || cleanText.length < 1) return;
 
-    // Create a compact PaperPilot action group to append into the native popup
-    const btnGroup = doc.createElement("div");
-    btnGroup.className = "paperpilot-native-popup-group";
-    btnGroup.style.cssText = `
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      margin-left: 6px;
-      padding: 2px 4px;
-      border-left: 1px solid rgba(128,128,128,0.3);
-      vertical-align: middle;
-    `;
+      dump(`[PaperPilot] Text selected: "${cleanText.slice(0, 30)}..."\n`);
 
-    // 1. Translate Button
-    const btnTranslate = doc.createElement("button");
-    btnTranslate.textContent = "🌐 翻译";
-    btnTranslate.title = "PaperPilot 划词翻译";
-    btnTranslate.style.cssText = `
-      background: #2563eb;
-      color: #ffffff;
-      border: none;
-      border-radius: 4px;
-      padding: 2px 7px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      line-height: 18px;
-    `;
+      // Remove any previously injected button group to always bind fresh selection
+      const existing = doc.querySelector(".paperpilot-btn-group");
+      if (existing && existing.parentNode) {
+        existing.parentNode.removeChild(existing);
+      }
 
-    // 2. Interpret Button
-    const btnInterpret = doc.createElement("button");
-    btnInterpret.textContent = "💡 解读";
-    btnInterpret.title = "PaperPilot 领域深度解读";
-    btnInterpret.style.cssText = `
-      background: #f1f5f9;
-      color: #1e293b;
-      border: 1px solid #cbd5e1;
-      border-radius: 4px;
-      padding: 2px 7px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      line-height: 18px;
-    `;
+      const btnGroup = doc.createElement("div");
+      btnGroup.className = "paperpilot-btn-group";
+      btnGroup.style.cssText = `
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 3px !important;
+        margin-left: 6px !important;
+        padding-left: 6px !important;
+        border-left: 1px solid rgba(128,128,128,0.3) !important;
+        vertical-align: middle !important;
+        height: 24px !important;
+      `;
 
-    // 3. Ask Button
-    const btnAsk = doc.createElement("button");
-    btnAsk.textContent = "❓ 提问";
-    btnAsk.title = "基于选段向 AI 提问";
-    btnAsk.style.cssText = `
-      background: #f1f5f9;
-      color: #1e293b;
-      border: 1px solid #cbd5e1;
-      border-radius: 4px;
-      padding: 2px 7px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      line-height: 18px;
-    `;
+      // 1. Translate Button
+      const btnTrans = doc.createElement("button");
+      btnTrans.textContent = "🌐 翻译";
+      btnTrans.id = "paperpilot-btn-translate";
+      btnTrans.title = "PaperPilot 划词翻译";
+      btnTrans.style.cssText = `
+        background: #2563eb !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 4px !important;
+        padding: 2px 7px !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        line-height: 18px !important;
+        display: inline-block !important;
+      `;
 
-    btnGroup.appendChild(btnTranslate);
-    btnGroup.appendChild(btnInterpret);
-    btnGroup.appendChild(btnAsk);
+      // 2. Interpret Button
+      const btnInterpret = doc.createElement("button");
+      btnInterpret.textContent = "💡 解读";
+      btnInterpret.id = "paperpilot-btn-interpret";
+      btnInterpret.title = "PaperPilot 领域学术解读";
+      btnInterpret.style.cssText = `
+        background: #f1f5f9 !important;
+        color: #1e293b !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 4px !important;
+        padding: 2px 7px !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        line-height: 18px !important;
+        display: inline-block !important;
+      `;
 
-    // Append to native popup
-    if (typeof append === "function") {
-      append(btnGroup);
+      // 3. Ask Button
+      const btnAsk = doc.createElement("button");
+      btnAsk.textContent = "❓ 提问";
+      btnAsk.id = "paperpilot-btn-ask";
+      btnAsk.title = "基于选段向 AI 提问";
+      btnAsk.style.cssText = `
+        background: #f1f5f9 !important;
+        color: #1e293b !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 4px !important;
+        padding: 2px 7px !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        line-height: 18px !important;
+        display: inline-block !important;
+      `;
+
+      btnGroup.appendChild(btnTrans);
+      btnGroup.appendChild(btnInterpret);
+      btnGroup.appendChild(btnAsk);
+
+      // Append via Zotero API if available
+      if (typeof append === "function") {
+        append(btnGroup);
+      } else {
+        const nativePopup = doc.querySelector(".selection-popup") as HTMLElement;
+        if (nativePopup) {
+          nativePopup.appendChild(btnGroup);
+        }
+      }
+
+      // Event handlers
+      btnTrans.addEventListener("click", async (e: MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        await this.showTranslationPopup(doc, cleanText, btnTrans);
+      });
+
+      btnInterpret.addEventListener("click", (e: MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        btnInterpret.textContent = "已发送解读 ✓";
+        setTimeout(() => {
+          btnInterpret.textContent = "💡 解读";
+        }, 2000);
+
+        if (reader) {
+          if (typeof reader.setRightSidebarOpen === "function") {
+            reader.setRightSidebarOpen(true);
+          } else if (typeof reader.openRightSidebar === "function") {
+            reader.openRightSidebar();
+          }
+        }
+        EventBus.emit("action:interpret", { text: cleanText });
+      });
+
+      btnAsk.addEventListener("click", (e: MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        btnAsk.textContent = "已置入提问 ✓";
+        setTimeout(() => {
+          btnAsk.textContent = "❓ 提问";
+        }, 2000);
+
+        if (reader) {
+          if (typeof reader.setRightSidebarOpen === "function") {
+            reader.setRightSidebarOpen(true);
+          } else if (typeof reader.openRightSidebar === "function") {
+            reader.openRightSidebar();
+          }
+        }
+        EventBus.emit("action:ask", { quote: cleanText });
+      });
+
+      // Auto-translate if enabled in preferences
+      if (PreferenceManager.get().autoTranslateSelection) {
+        setTimeout(() => {
+          this.showTranslationPopup(doc, cleanText, btnTrans);
+        }, 150);
+      }
+    } catch (err) {
+      dump(`[PaperPilot] Error in handleNativeSelectionPopup: ${err}\n`);
     }
+  }
 
-    // Actions
-    btnTranslate.addEventListener("click", async (e: MouseEvent) => {
-      e.stopPropagation();
-      e.preventDefault();
-      await this.showTranslationPopup(doc, cleanText, btnTranslate);
-    });
+  /**
+   * 2. Fallback reader selection listener attached to reader document
+   */
+  static attachToReaderDocument(doc: Document, win: Window): void {
+    if (!doc || !doc.body) return;
 
-    btnInterpret.addEventListener("click", (e: MouseEvent) => {
-      e.stopPropagation();
-      e.preventDefault();
-      this.hidePopup();
-      EventBus.emit("action:interpret", { text: cleanText });
-    });
-
-    btnAsk.addEventListener("click", (e: MouseEvent) => {
-      e.stopPropagation();
-      e.preventDefault();
-      this.hidePopup();
-      EventBus.emit("action:ask", { quote: cleanText });
-    });
-
-    // Auto-translate if user enabled it
-    if (PreferenceManager.get().autoTranslateSelection) {
+    doc.addEventListener("mouseup", (e: MouseEvent) => {
       setTimeout(() => {
-        this.showTranslationPopup(doc, cleanText, btnTranslate);
-      }, 100);
+        try {
+          const sel = win.getSelection();
+          const rawText = sel ? sel.toString() : "";
+          const cleanText = SelectionHelper.cleanPdfText(rawText);
+
+          if (!cleanText || cleanText.length < 2) {
+            return;
+          }
+
+          if (this.activePopup && this.activePopup.contains(e.target as Node)) {
+            return;
+          }
+
+          const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
+          if (!range) return;
+
+          const rect = range.getBoundingClientRect();
+          this.showStandaloneFloatingBar(doc, rect, cleanText);
+        } catch (err) {
+          dump(`[PaperPilot] mouseup handler error: ${err}\n`);
+        }
+      }, 80);
+    });
+
+    doc.addEventListener("mousedown", (e: MouseEvent) => {
+      if (
+        (this.activePopup && this.activePopup.contains(e.target as Node)) ||
+        (this.activeFloatingBar && this.activeFloatingBar.contains(e.target as Node))
+      ) {
+        return;
+      }
+      this.hide();
+    });
+  }
+
+  static showStandaloneFloatingBar(doc: Document, rect: DOMRect, text: string): void {
+    const nativePopup = doc.querySelector(".selection-popup");
+    if (nativePopup && (nativePopup as HTMLElement).offsetWidth > 0) {
+      return;
     }
+
+    this.hideBar();
+
+    const bar = doc.createElement("div");
+    bar.className = "paperpilot-floating-bar";
+    bar.style.cssText = `
+      position: fixed !important;
+      z-index: 2147483647 !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 4px !important;
+      background: #ffffff !important;
+      border: 1px solid #cbd5e1 !important;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18) !important;
+      border-radius: 6px !important;
+      padding: 3px 6px !important;
+    `;
+
+    const top = Math.max(10, rect.top - 38);
+    const left = Math.max(10, rect.left + rect.width / 2 - 80);
+
+    bar.style.top = `${top}px`;
+    bar.style.left = `${left}px`;
+
+    bar.innerHTML = `
+      <button id="pp-fb-trans" style="background:#2563eb; color:#fff; border:none; border-radius:4px; padding:2px 8px; font-size:12px; font-weight:500; cursor:pointer;">🌐 翻译</button>
+      <button id="pp-fb-interpret" style="background:#f1f5f9; color:#1e293b; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; font-size:12px; font-weight:500; cursor:pointer;">💡 解读</button>
+      <button id="pp-fb-ask" style="background:#f1f5f9; color:#1e293b; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; font-size:12px; font-weight:500; cursor:pointer;">❓ 提问</button>
+    `;
+
+    doc.body.appendChild(bar);
+    this.activeFloatingBar = bar;
+
+    bar.querySelector("#pp-fb-trans")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.showTranslationPopup(doc, text, bar);
+    });
+
+    bar.querySelector("#pp-fb-interpret")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.hide();
+      EventBus.emit("action:interpret", { text });
+    });
+
+    bar.querySelector("#pp-fb-ask")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.hide();
+      EventBus.emit("action:ask", { quote: text });
+    });
   }
 
   static async showTranslationPopup(doc: Document, text: string, anchorEl: HTMLElement): Promise<void> {
@@ -123,24 +271,31 @@ export class FloatingBarManager {
     const popup = doc.createElement("div");
     popup.className = "paperpilot-popup-card";
     popup.style.cssText = `
-      position: absolute;
-      z-index: 999999;
-      width: 320px;
-      max-width: 90vw;
-      background: #ffffff;
-      color: #1e293b;
-      border: 1px solid #cbd5e1;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-size: 13px;
-      line-height: 1.5;
+      position: fixed !important;
+      z-index: 2147483647 !important;
+      width: 320px !important;
+      max-width: 90vw !important;
+      background: #ffffff !important;
+      color: #1e293b !important;
+      border: 1px solid #cbd5e1 !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18) !important;
+      border-radius: 8px !important;
+      padding: 10px 12px !important;
+      font-size: 13px !important;
+      line-height: 1.5 !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif !important;
     `;
 
-    // Position popup below anchor button
     const rect = anchorEl.getBoundingClientRect();
-    const top = rect.bottom + 8 + (doc.documentElement.scrollTop || doc.body.scrollTop || 0);
-    const left = Math.max(10, Math.min(rect.left, doc.documentElement.clientWidth - 340));
+    const win = doc.defaultView || (typeof window !== "undefined" ? window : null);
+    const viewWidth = win?.innerWidth || 800;
+    const viewHeight = win?.innerHeight || 600;
+
+    let top = rect.bottom + 8;
+    if (top + 200 > viewHeight) {
+      top = Math.max(10, rect.top - 210);
+    }
+    const left = Math.max(10, Math.min(rect.left, viewWidth - 340));
 
     popup.style.top = `${top}px`;
     popup.style.left = `${left}px`;
@@ -199,7 +354,15 @@ export class FloatingBarManager {
     }
   }
 
+  static hideBar(): void {
+    if (this.activeFloatingBar && this.activeFloatingBar.parentNode) {
+      this.activeFloatingBar.parentNode.removeChild(this.activeFloatingBar);
+      this.activeFloatingBar = null;
+    }
+  }
+
   static hide(): void {
     this.hidePopup();
+    this.hideBar();
   }
 }

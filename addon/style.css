@@ -1,0 +1,264 @@
+/* PaperPilot - Zotero 7-10 Stylesheet */
+
+:root {
+  --pp-primary: #2563eb;
+  --pp-primary-hover: #1d4ed8;
+  --pp-primary-light: #eff6ff;
+  --pp-bg: #ffffff;
+  --pp-bg-secondary: #f8fafc;
+  --pp-border: #e2e8f0;
+  --pp-text: #1e293b;
+  --pp-text-muted: #64748b;
+  --pp-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --pp-radius: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pp-primary: #3b82f6;
+    --pp-primary-hover: #60a5fa;
+    --pp-primary-light: #1e293b;
+    --pp-bg: #1e1e24;
+    --pp-bg-secondary: #272730;
+    --pp-border: #3f3f46;
+    --pp-text: #f1f5f9;
+    --pp-text-muted: #94a3b8;
+    --pp-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* 1. Floating Action Bar */
+.paperpilot-floating-bar {
+  position: absolute;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--pp-bg);
+  border: 1px solid var(--pp-border);
+  box-shadow: var(--pp-shadow);
+  border-radius: var(--pp-radius);
+  padding: 4px 6px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  user-select: none;
+  animation: pp-fade-in 0.15s ease-out;
+}
+
+@keyframes pp-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.paperpilot-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--pp-text);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.paperpilot-btn:hover {
+  background: var(--pp-primary-light);
+  color: var(--pp-primary);
+}
+
+.paperpilot-btn.primary {
+  background: var(--pp-primary);
+  color: #ffffff;
+}
+
+.paperpilot-btn.primary:hover {
+  background: var(--pp-primary-hover);
+}
+
+/* 2. Floating Translation Card */
+.paperpilot-popup-card {
+  position: absolute;
+  z-index: 99998;
+  width: 320px;
+  max-width: 90vw;
+  background: var(--pp-bg);
+  border: 1px solid var(--pp-border);
+  box-shadow: var(--pp-shadow);
+  border-radius: var(--pp-radius);
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--pp-text);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.paperpilot-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pp-text-muted);
+  border-bottom: 1px solid var(--pp-border);
+  padding-bottom: 4px;
+}
+
+.paperpilot-card-body {
+  max-height: 200px;
+  overflow-y: auto;
+  word-break: break-word;
+}
+
+/* 3. Sidebar Container */
+.paperpilot-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--pp-bg);
+  color: var(--pp-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+.paperpilot-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--pp-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--pp-bg-secondary);
+}
+
+.paperpilot-title {
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.paperpilot-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--pp-border);
+  background: var(--pp-bg-secondary);
+}
+
+.paperpilot-tab-item {
+  flex: 1;
+  text-align: center;
+  padding: 8px 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--pp-text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.paperpilot-tab-item.active {
+  color: var(--pp-primary);
+  border-bottom-color: var(--pp-primary);
+  background: var(--pp-bg);
+}
+
+.paperpilot-tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 4. Chat Messages */
+.paperpilot-chat-history {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+}
+
+.paperpilot-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.55;
+  animation: pp-fade-in 0.2s ease-out;
+}
+
+.paperpilot-msg.user {
+  align-self: flex-end;
+  background: var(--pp-primary-light);
+  color: var(--pp-primary);
+  border: 1px solid var(--pp-border);
+  padding: 8px 12px;
+  border-radius: 12px 12px 2px 12px;
+  max-width: 88%;
+}
+
+.paperpilot-msg.ai {
+  align-self: flex-start;
+  background: var(--pp-bg-secondary);
+  border: 1px solid var(--pp-border);
+  padding: 10px 12px;
+  border-radius: 12px 12px 12px 2px;
+  max-width: 95%;
+}
+
+.paperpilot-msg.ai pre {
+  background: rgba(0,0,0,0.06);
+  padding: 6px 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.paperpilot-input-box {
+  border-top: 1px solid var(--pp-border);
+  padding: 10px;
+  background: var(--pp-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.paperpilot-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  border: 1px solid var(--pp-border);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--pp-bg-secondary);
+  color: var(--pp-text);
+  outline: none;
+  min-height: 54px;
+}
+
+.paperpilot-textarea:focus {
+  border-color: var(--pp-primary);
+}
+
+.paperpilot-toolbar-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.paperpilot-domain-badge {
+  font-size: 11px;
+  background: var(--pp-primary-light);
+  color: var(--pp-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}

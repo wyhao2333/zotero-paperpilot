@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="ppGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#8B5CF6" />
+    </linearGradient>
+  </defs>
+  <!-- Background Circle -->
+  <circle cx="24" cy="24" r="22" fill="url(#ppGrad)" />
+  
+  <!-- Paper Plane / Pilot Shape -->
+  <path d="M12 24 L36 14 L26 34 L22 26 Z" fill="#FFFFFF" opacity="0.95" />
+  <path d="M22 26 L26 34 L26 27 Z" fill="#CBD5E1" />
+  
+  <!-- Sparkle AI Star -->
+  <path d="M34 26 Q36 29 39 29 Q36 29 34 32 Q34 29 31 29 Q34 29 34 26 Z" fill="#FBBF24" />
+</svg>

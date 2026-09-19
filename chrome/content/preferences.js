@@ -100,6 +100,8 @@
               customPromptTemplate:
                 parsed.customPromptTemplate ||
                 "请结合上下文对以下内容进行深度学术解读，并解析关键术语：\n\n{text}",
+              interpretationPromptOverrides:
+                parsed.interpretationPromptOverrides || {},
             };
           }
         }
@@ -115,6 +117,7 @@
         defaultDomain: "general",
         customPromptTemplate:
           "请结合上下文对以下内容进行深度学术解读，并解析关键术语：\n\n{text}",
+        interpretationPromptOverrides: {},
       };
     },
 
@@ -168,6 +171,8 @@
       const modelInput = doc.getElementById("pp-pref-model");
       const domainSelect = doc.getElementById("pp-pref-default-domain");
       const customPromptArea = doc.getElementById("pp-pref-custom-prompt");
+      const promptWarningLabel = doc.getElementById("pp-pref-prompt-warning");
+      const resetDomainPromptBtn = doc.getElementById("pp-pref-btn-reset-domain-prompt");
       const testBtn = doc.getElementById("pp-pref-btn-test");
       const testResultLabel = doc.getElementById("pp-pref-test-result");
       const saveStatusLabel = doc.getElementById("pp-pref-save-status");
@@ -177,7 +182,71 @@
       if (autoTransCb) autoTransCb.checked = prefs.autoTranslateSelection;
       if (providerSelect) providerSelect.value = prefs.selectedAIProvider;
       if (domainSelect) domainSelect.value = prefs.defaultDomain;
-      if (customPromptArea) customPromptArea.value = prefs.customPromptTemplate;
+
+      const domainPromptDrafts = {};
+
+      const getDomainPromptTemplate = (domain) => {
+        const zotero = getZotero();
+        if (zotero?.PaperPilot?.getInterpretationPromptTemplate) {
+          try {
+            return zotero.PaperPilot.getInterpretationPromptTemplate(domain);
+          } catch (e) {}
+        }
+        return "请对以下文献选段进行专业解读：\n\n{text}";
+      };
+
+      const getDefaultDomainPromptTemplate = (domain) => {
+        const zotero = getZotero();
+        if (zotero?.PaperPilot?.getDefaultInterpretationPromptTemplate) {
+          try {
+            return zotero.PaperPilot.getDefaultInterpretationPromptTemplate(domain);
+          } catch (e) {}
+        }
+        return "请对以下文献选段进行专业解读：\n\n{text}";
+      };
+
+      let currentDomainKey = domainSelect ? domainSelect.value : "general";
+
+      const loadPromptForDomain = (domain) => {
+        if (domainPromptDrafts[domain] !== undefined) {
+          if (customPromptArea) customPromptArea.value = domainPromptDrafts[domain];
+        } else if (
+          prefs.interpretationPromptOverrides &&
+          prefs.interpretationPromptOverrides[domain]
+        ) {
+          const val = prefs.interpretationPromptOverrides[domain];
+          domainPromptDrafts[domain] = val;
+          if (customPromptArea) customPromptArea.value = val;
+        } else {
+          const tpl = getDomainPromptTemplate(domain);
+          domainPromptDrafts[domain] = tpl;
+          if (customPromptArea) customPromptArea.value = tpl;
+        }
+        if (promptWarningLabel) promptWarningLabel.style.display = "none";
+      };
+
+      loadPromptForDomain(currentDomainKey);
+
+      domainSelect?.addEventListener("change", () => {
+        if (customPromptArea) {
+          domainPromptDrafts[currentDomainKey] = customPromptArea.value;
+        }
+        currentDomainKey = domainSelect.value;
+        loadPromptForDomain(currentDomainKey);
+      });
+
+      resetDomainPromptBtn?.addEventListener("click", () => {
+        const defaultTpl = getDefaultDomainPromptTemplate(currentDomainKey);
+        if (customPromptArea) {
+          customPromptArea.value = defaultTpl;
+        }
+        domainPromptDrafts[currentDomainKey] = defaultTpl;
+        if (prefs.interpretationPromptOverrides) {
+          delete prefs.interpretationPromptOverrides[currentDomainKey];
+        }
+        if (promptWarningLabel) promptWarningLabel.style.display = "none";
+        dump(`[PaperPilot Prefs] Reset prompt for domain: ${currentDomainKey}\n`);
+      });
 
       let currentProviderKey = providerSelect ? providerSelect.value : "zhipu";
 
@@ -216,13 +285,53 @@
       saveBtn.addEventListener("click", () => {
         dump("[PaperPilot Prefs] save requested\n");
 
+        if (customPromptArea) {
+          domainPromptDrafts[currentDomainKey] = customPromptArea.value;
+        }
+
+        // Validate that current prompt has {text}
+        const currentVal = customPromptArea ? customPromptArea.value : "";
+        if (!currentVal.includes("{text}")) {
+          if (promptWarningLabel) {
+            promptWarningLabel.textContent = "⚠️ 提示词必须包含 {text} 占位符，否则 AI 无法接收所选文字！";
+            promptWarningLabel.style.display = "block";
+          }
+          if (saveStatusLabel) {
+            saveStatusLabel.textContent = "❌ 保存失败: 提示词缺少 {text}";
+            saveStatusLabel.style.color = "#dc2626";
+            saveStatusLabel.style.display = "inline";
+          }
+          return;
+        }
+        if (promptWarningLabel) {
+          promptWarningLabel.style.display = "none";
+        }
+
         saveCurrentFieldsToCache(currentProviderKey);
         prefs.selectedAIProvider = currentProviderKey;
         if (transSelect) prefs.translationService = transSelect.value;
         if (targetLangSelect) prefs.targetLanguage = targetLangSelect.value;
         if (autoTransCb) prefs.autoTranslateSelection = autoTransCb.checked;
         if (domainSelect) prefs.defaultDomain = domainSelect.value;
-        if (customPromptArea) prefs.customPromptTemplate = customPromptArea.value;
+
+        // Persist overrides from drafts
+        if (!prefs.interpretationPromptOverrides) {
+          prefs.interpretationPromptOverrides = {};
+        }
+        for (const [dKey, dVal] of Object.entries(domainPromptDrafts)) {
+          const defTpl = getDefaultDomainPromptTemplate(dKey);
+          if (typeof dVal === "string" && dVal.trim() && dVal.trim() !== defTpl.trim()) {
+            prefs.interpretationPromptOverrides[dKey] = dVal.trim();
+          } else {
+            delete prefs.interpretationPromptOverrides[dKey];
+          }
+        }
+
+        if (domainPromptDrafts["custom"]) {
+          prefs.customPromptTemplate = domainPromptDrafts["custom"];
+        } else if (customPromptArea) {
+          prefs.customPromptTemplate = customPromptArea.value;
+        }
 
         const success = PaperPilot_Preferences.savePrefs(prefs);
 

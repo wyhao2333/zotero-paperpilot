@@ -2,6 +2,8 @@ import { ChatMessage } from "../../types/zotero";
 
 export class ChatView {
   private container: HTMLElement;
+  private streamingTextNodes: Map<string, Text> = new Map();
+  private scrollTimer: any = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -9,6 +11,7 @@ export class ChatView {
 
   render(messages: ChatMessage[]): void {
     this.container.innerHTML = "";
+    this.streamingTextNodes.clear();
     for (const msg of messages) {
       this.appendMessage(msg, false);
     }
@@ -16,7 +19,9 @@ export class ChatView {
   }
 
   appendMessage(msg: ChatMessage, scroll = true): HTMLElement {
-    const el = document.createElement("div");
+    const doc = this.container.ownerDocument;
+    const win = doc.defaultView;
+    const el = doc.createElement("div");
     el.className = `paperpilot-msg ${msg.role === "user" ? "user" : "ai"}`;
     el.id = `msg-${msg.id}`;
 
@@ -44,19 +49,19 @@ export class ChatView {
     if (copyBtn) {
       copyBtn.addEventListener("click", () => {
         const copyText = msg.content;
-        const nav = typeof navigator !== "undefined" ? navigator : null;
+        const nav = win?.navigator || (typeof navigator !== "undefined" ? navigator : null);
         if (nav?.clipboard?.writeText) {
           nav.clipboard.writeText(copyText).catch(() => {});
         } else if (typeof Zotero !== "undefined" && (Zotero as any).Utilities?.copyTextToClipboard) {
           (Zotero as any).Utilities.copyTextToClipboard(copyText);
         } else {
           try {
-            const ta = document.createElement("textarea");
+            const ta = doc.createElement("textarea");
             ta.value = copyText;
-            document.body.appendChild(ta);
+            doc.body.appendChild(ta);
             ta.select();
-            document.execCommand("copy");
-            document.body.removeChild(ta);
+            doc.execCommand("copy");
+            doc.body.removeChild(ta);
           } catch (e) {}
         }
         copyBtn.textContent = "已复制!";
@@ -71,18 +76,90 @@ export class ChatView {
     return el;
   }
 
-  updateStreamingMessage(msgId: string, content: string): void {
+  /**
+   * Appends incremental text chunk during streaming without full DOM or Markdown re-rendering.
+   * O(1) text node operation for high-frequency token updates.
+   */
+  appendStreamingDelta(msgId: string, delta: string): void {
+    const doc = this.container.ownerDocument;
+    const el = this.container.querySelector(`#msg-${msgId}`);
+    if (!el) return;
+
+    const contentEl = el.querySelector(".msg-content") as HTMLElement;
+    if (!contentEl) return;
+
+    let textNode = this.streamingTextNodes.get(msgId);
+    if (!textNode) {
+      // First delta: clear placeholder content and create streaming text node
+      contentEl.innerHTML = "";
+      textNode = doc.createTextNode(delta);
+      contentEl.appendChild(textNode);
+      this.streamingTextNodes.set(msgId, textNode);
+    } else {
+      textNode.appendData(delta);
+    }
+
+    this.throttledScrollToBottom();
+  }
+
+  /**
+   * Finalizes streaming message by executing full Markdown rendering once.
+   */
+  finishStreamingMessage(msgId: string, fullContent: string): void {
+    this.streamingTextNodes.delete(msgId);
     const el = this.container.querySelector(`#msg-${msgId}`);
     if (el) {
-      const contentEl = el.querySelector(".msg-content");
+      const contentEl = el.querySelector(".msg-content") as HTMLElement;
+      if (contentEl) {
+        contentEl.innerHTML = this.renderMarkdown(fullContent);
+      }
+    }
+    this.scrollToBottom();
+  }
+
+  /**
+   * Fallback / batch updater for non-token-level status changes.
+   */
+  updateStreamingMessage(msgId: string, content: string): void {
+    this.streamingTextNodes.delete(msgId);
+    const el = this.container.querySelector(`#msg-${msgId}`);
+    if (el) {
+      const contentEl = el.querySelector(".msg-content") as HTMLElement;
       if (contentEl) {
         contentEl.innerHTML = this.renderMarkdown(content);
-        this.scrollToBottom();
+        this.throttledScrollToBottom();
       }
     }
   }
 
+  throttledScrollToBottom(): void {
+    if (this.scrollTimer) return;
+    const doc = this.container.ownerDocument;
+    const win = doc.defaultView;
+    if (win && typeof win.requestAnimationFrame === "function") {
+      this.scrollTimer = win.requestAnimationFrame(() => {
+        this.container.scrollTop = this.container.scrollHeight;
+        this.scrollTimer = null;
+      });
+    } else {
+      this.scrollTimer = setTimeout(() => {
+        this.container.scrollTop = this.container.scrollHeight;
+        this.scrollTimer = null;
+      }, 80);
+    }
+  }
+
   scrollToBottom(): void {
+    if (this.scrollTimer) {
+      const doc = this.container.ownerDocument;
+      const win = doc.defaultView;
+      if (win && typeof win.cancelAnimationFrame === "function") {
+        win.cancelAnimationFrame(this.scrollTimer);
+      } else {
+        clearTimeout(this.scrollTimer);
+      }
+      this.scrollTimer = null;
+    }
     this.container.scrollTop = this.container.scrollHeight;
   }
 

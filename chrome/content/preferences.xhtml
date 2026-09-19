@@ -86,8 +86,12 @@
     </hbox>
 
     <vbox style="margin-top: 6px;">
-      <label value="自定义解读 Prompt 模板 (使用 {text} 作为选段占位符):" style="font-size:12px; color:#555; margin-bottom: 4px;" />
+      <hbox align="center" style="justify-content: space-between; margin-bottom: 4px;">
+        <label value="解读 Prompt 模板 (必须包含 {text} 选段占位符):" style="font-size:12px; color:#555;" />
+        <html:button type="button" id="pp-pref-btn-reset-domain-prompt" style="padding: 2px 8px; font-size:11px; cursor:pointer; border-radius:3px; border:1px solid #ccc; background:#f8fafc;">↺ 恢复当前领域默认</html:button>
+      </hbox>
       <html:textarea id="pp-pref-custom-prompt" rows="3" style="width: 100%; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-family: monospace; font-size: 12px;"></html:textarea>
+      <label id="pp-pref-prompt-warning" style="font-size:11px; color:#dc2626; display:none; margin-top:2px;">⚠️ 提示词必须包含 {text} 占位符</label>
     </vbox>
   </groupbox>
 

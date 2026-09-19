@@ -144,6 +144,17 @@ async function onMainWindowLoad({ window }) {
   }
 }
 
+async function onMainWindowUnload({ window }) {
+  try {
+    const pluginInstance = typeof Zotero !== "undefined" ? Zotero.PaperPilot : null;
+    if (pluginInstance && typeof pluginInstance.onMainWindowUnload === "function") {
+      await pluginInstance.onMainWindowUnload(window);
+    }
+  } catch (e) {
+    dump("[PaperPilot] onMainWindowUnload error: " + e + "\n");
+  }
+}
+
 function shutdown({ id, version, resourceURI, rootURI } = {}, reason) {
   if (reason === APP_SHUTDOWN) return;
   dump("[PaperPilot] Shutting down PaperPilot...\n");

@@ -7,7 +7,7 @@ import { NoteExporter } from "./note-exporter";
 import { PromptManager, DOMAIN_PROMPTS } from "../ai/prompts";
 import { AIClient } from "../ai/client";
 import { PaperDigestService } from "../ai/digest";
-import { PaperPilotSidebarController, PendingAction } from "./controller";
+import { PendingAction } from "./controller";
 import { PaperContextService } from "../reader/paper-context";
 
 export class SidebarPanel {
@@ -24,7 +24,7 @@ export class SidebarPanel {
     this.container = container;
     this.render();
     this.bindEvents();
-    PaperPilotSidebarController.attachPanel(this);
+    // Panel registration is exclusively performed in onRender where tabID is explicitly known.
   }
 
   async loadPaper(
@@ -33,6 +33,8 @@ export class SidebarPanel {
     parentItemID: number,
     attachmentID?: number
   ): Promise<void> {
+    // Reset attachment ID before resolving new attachment to prevent stale cross-tab context
+    this.currentAttachmentID = 0;
     this.currentItemKey = itemKey;
     this.currentTitle = title || "当前论文";
     this.currentParentItemID = parentItemID;
@@ -55,10 +57,11 @@ export class SidebarPanel {
   }
 
   /**
-   * Consumes pending actions dispatched from selection popup or controller
+   * Consumes pending actions dispatched from selection popup or controller.
+   * Returns true only when delivery and UI state update strictly succeed.
    */
-  handlePendingAction(action: PendingAction): void {
-    if (!action) return;
+  handlePendingAction(action: PendingAction): boolean {
+    if (!action) return false;
 
     if (action.attachmentID && !this.currentAttachmentID) {
       this.currentAttachmentID = action.attachmentID;
@@ -67,14 +70,30 @@ export class SidebarPanel {
     if (action.type === "ask") {
       this.switchTab("chat");
       this.setQuote(action.selectedText);
+
+      const banner = this.container.querySelector("#pp-quote-banner") as HTMLElement;
+      const quoteEl = this.container.querySelector("#pp-quote-text") as HTMLElement;
       const input = this.container.querySelector("#pp-chat-input") as HTMLTextAreaElement;
-      input?.focus();
+
+      if (!banner || !quoteEl || !input) {
+        return false;
+      }
+
+      input.focus();
+
+      return (
+        banner.style.display !== "none" &&
+        quoteEl.textContent === action.selectedText
+      );
     } else if (action.type === "interpret") {
       this.switchTab("chat");
       const domainSelect = this.container.querySelector("#pp-domain-select") as HTMLSelectElement;
       const domain = (domainSelect ? domainSelect.value : "general") as DomainType;
       this.handleInterpret(action.selectedText, domain);
+      return true;
     }
+
+    return false;
   }
 
   private render(): void {
@@ -95,7 +114,7 @@ export class SidebarPanel {
           </div>
         </div>
 
-        <!-- Navigation Tabs (Clean two tabs: Chat and Settings; Translation is in Selection Popup) -->
+        <!-- Navigation Tabs -->
         <div class="paperpilot-tabs">
           <div class="paperpilot-tab-item active" data-tab="chat">💬 伴读问答</div>
           <div class="paperpilot-tab-item" data-tab="settings">⚙️ 设置</div>
@@ -227,6 +246,13 @@ export class SidebarPanel {
       updateProviderFields();
     });
 
+    // Immediate domain synchronization: switching domain in sidebar updates defaultDomain immediately
+    domainSelect?.addEventListener("change", () => {
+      const newDomain = domainSelect.value as DomainType;
+      PreferenceManager.set({ defaultDomain: newDomain });
+      dump(`[PaperPilot] Default domain dynamically updated to: ${newDomain}\n`);
+    });
+
     const saveBtn = this.container.querySelector("#cfg-btn-save");
     saveBtn?.addEventListener("click", () => {
       const pKey = providerSelect.value;
@@ -252,6 +278,9 @@ export class SidebarPanel {
   }
 
   private bindEvents(): void {
+    const doc = this.container.ownerDocument;
+    const win = doc.defaultView || (typeof window !== "undefined" ? window : null);
+
     // Tab switching
     const tabItems = this.container.querySelectorAll(".paperpilot-tab-item");
     tabItems.forEach((tab) => {
@@ -301,15 +330,22 @@ export class SidebarPanel {
 
     this.container.querySelector("#pp-btn-export")?.addEventListener("click", async () => {
       if (!this.history.messages.length) {
-        alert("当前尚无对话记录可导出。");
+        if (win?.alert) win.alert("当前尚无对话记录可导出。");
+        else alert("当前尚无对话记录可导出。");
         return;
       }
       const ok = await NoteExporter.exportToZoteroNote(this.currentParentItemID, this.currentTitle, this.history.messages);
-      alert(ok ? "已成功保存为 Zotero 文献笔记！" : "保存笔记失败，请检查条目权限。");
+      const alertMsg = ok ? "已成功保存为 Zotero 文献笔记！" : "保存笔记失败，请检查条目权限。";
+      if (win?.alert) win.alert(alertMsg);
+      else alert(alertMsg);
     });
 
     this.container.querySelector("#pp-btn-clear")?.addEventListener("click", async () => {
-      if (confirm("确定要清空当前文献的所有 PaperPilot 对话历史吗？")) {
+      const shouldClear = win?.confirm
+        ? win.confirm("确定要清空当前文献的所有 PaperPilot 对话历史吗？")
+        : confirm("确定要清空当前文献的所有 PaperPilot 对话历史吗？");
+
+      if (shouldClear) {
         await StorageManager.clearHistory(this.currentItemKey);
         this.history.messages = [];
         this.chatView.render([]);
@@ -376,18 +412,21 @@ export class SidebarPanel {
     this.history.messages.push(aiMsg);
     this.chatView.appendMessage(aiMsg);
 
-    // Retrieve relevant context from PDF full text
+    // Retrieve relevant context from PDF full text with fallback error handling
     let relevantContext = "";
     if (this.currentAttachmentID) {
-      relevantContext = await PaperContextService.getRelevantContext(
-        this.currentAttachmentID,
-        content,
-        quote
-      );
+      try {
+        relevantContext = await PaperContextService.getRelevantContext(
+          this.currentAttachmentID,
+          content,
+          quote
+        );
+      } catch (ctxErr) {
+        dump(`[PaperPilot] Paper context retrieval failed: ${ctxErr}. Proceeding with quote & question...\n`);
+      }
     }
 
-    let systemPrompt = `你是一位专业高效的学术伴读助手 PaperPilot。
-针对用户的提问或论文选段，给出清晰、严谨、有学术洞见的解答。`;
+    let systemPrompt = `你是一位专业高效的学术伴读助手 PaperPilot。\n针对用户的提问或论文选段，给出清晰、严谨、有学术洞见的解答。`;
 
     if (relevantContext) {
       systemPrompt += `\n\n【论文相关原文段落参考】:\n${relevantContext}\n\n回答准则: 优先解答用户提问及所选引文，结合上述论文真实上下文进行分析推导。无法从论文支持的内容严禁臆造。`;
@@ -410,13 +449,14 @@ export class SidebarPanel {
     try {
       let fullResponse = "";
       await AIClient.chat(messagesPayload, {
-        onChunk: (_delta, accumulated) => {
+        onChunk: (delta, accumulated) => {
           fullResponse = accumulated;
-          this.chatView.updateStreamingMessage(aiMsgId, accumulated);
+          this.chatView.appendStreamingDelta(aiMsgId, delta);
         },
       });
 
       aiMsg.content = fullResponse;
+      this.chatView.finishStreamingMessage(aiMsgId, fullResponse);
       await StorageManager.saveHistory(this.history);
     } catch (e: any) {
       aiMsg.content = `❌ 出错: ${e.message || e}`;
@@ -456,13 +496,14 @@ export class SidebarPanel {
     try {
       let fullResponse = "";
       await AIClient.chat(messages, {
-        onChunk: (_delta, accumulated) => {
+        onChunk: (delta, accumulated) => {
           fullResponse = accumulated;
-          this.chatView.updateStreamingMessage(aiMsgId, accumulated);
+          this.chatView.appendStreamingDelta(aiMsgId, delta);
         },
       });
 
       aiMsg.content = fullResponse;
+      this.chatView.finishStreamingMessage(aiMsgId, fullResponse);
       await StorageManager.saveHistory(this.history);
     } catch (e: any) {
       aiMsg.content = `❌ 解读失败: ${e.message || e}`;
@@ -502,13 +543,14 @@ export class SidebarPanel {
         onProgress: (status) => {
           this.chatView.updateStreamingMessage(aiMsgId, `*${status}*`);
         },
-        onChunk: (_delta, accumulated) => {
+        onChunk: (delta, accumulated) => {
           fullResponse = accumulated;
-          this.chatView.updateStreamingMessage(aiMsgId, accumulated);
+          this.chatView.appendStreamingDelta(aiMsgId, delta);
         },
       });
 
       aiMsg.content = fullResponse;
+      this.chatView.finishStreamingMessage(aiMsgId, fullResponse);
       await StorageManager.saveHistory(this.history);
     } catch (e: any) {
       aiMsg.content = `❌ 生成报告失败: ${e.message || e}`;

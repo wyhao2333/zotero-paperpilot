@@ -81,15 +81,30 @@ export class PromptManager {
     return DOMAIN_PROMPTS[domain] || DOMAIN_PROMPTS.general;
   }
 
-  static buildInterpretationMessages(text: string, domain?: DomainType): { role: "system" | "user"; content: string }[] {
+  static getDefaultUserPromptTemplate(domain: DomainType): string {
+    return DOMAIN_PROMPTS[domain]?.userPromptTemplate || DOMAIN_PROMPTS.general.userPromptTemplate;
+  }
+
+  static getEffectiveUserPromptTemplate(domain: DomainType): string {
+    const prefs = PreferenceManager.get();
+    const override = prefs.interpretationPromptOverrides?.[domain];
+    if (override && override.trim()) {
+      return override.trim();
+    }
+    if (domain === "custom" && prefs.customPromptTemplate) {
+      return prefs.customPromptTemplate;
+    }
+    return this.getDefaultUserPromptTemplate(domain);
+  }
+
+  static buildInterpretationMessages(
+    text: string,
+    domain?: DomainType
+  ): { role: "system" | "user"; content: string }[] {
     const activeDomain = domain || PreferenceManager.get().defaultDomain || "general";
     const config = this.getPrompt(activeDomain);
-
-    let userContent = config.userPromptTemplate.replace("{text}", text);
-    if (activeDomain === "custom") {
-      const customTpl = PreferenceManager.get().customPromptTemplate || "{text}";
-      userContent = customTpl.replace("{text}", text);
-    }
+    const template = this.getEffectiveUserPromptTemplate(activeDomain);
+    const userContent = template.replace("{text}", text);
 
     return [
       { role: "system", content: config.systemPrompt },

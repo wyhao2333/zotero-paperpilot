@@ -250,10 +250,18 @@ export class FloatingBarManager {
         try {
           const messages = PromptManager.buildInterpretationMessages(cleanText);
           let full = "";
+          let firstChunk = true;
           await AIClient.chat(messages, {
-            onChunk: (_delta, accumulated) => {
+            onChunk: (delta, accumulated) => {
               full = accumulated;
-              if (bodyEl) bodyEl.textContent = accumulated;
+              if (bodyEl) {
+                if (firstChunk) {
+                  firstChunk = false;
+                  bodyEl.textContent = "";
+                }
+                bodyEl.append(doc.createTextNode(delta));
+                bodyEl.scrollTop = bodyEl.scrollHeight;
+              }
             },
           });
           if (bodyEl && full) {

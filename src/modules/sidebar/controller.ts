@@ -12,11 +12,18 @@ export type PendingAction =
       tabID?: string;
     };
 
+interface PendingDelivery {
+  action: PendingAction;
+  resolve: (success: boolean) => void;
+  timer: any;
+}
+
 export class PaperPilotSidebarController {
   private static sectionKey: string = "paperpilot-section";
   private static panelsByTabID: Map<string, any> = new Map();
   private static panelsByBody: WeakMap<any, any> = new WeakMap();
   private static pendingActions: Map<string, PendingAction> = new Map();
+  private static pendingDeliveries: Map<string, PendingDelivery> = new Map();
 
   static setSectionKey(key: string): void {
     if (key) {
@@ -29,9 +36,12 @@ export class PaperPilotSidebarController {
   }
 
   /**
-   * Called by SidebarPanel when mounted/rendered to register with the current tab context.
+   * Called by ItemPane onRender with tabID and context.
    */
-  static attachPanel(panel: any, context?: { tabID?: string; body?: any; item?: any }): void {
+  static attachPanel(
+    panel: any,
+    context?: { tabID?: string; body?: any; itemDetails?: any; item?: any }
+  ): void {
     const tabID = context?.tabID || "";
     if (tabID) {
       this.panelsByTabID.set(tabID, panel);
@@ -40,7 +50,26 @@ export class PaperPilotSidebarController {
       this.panelsByBody.set(context.body, panel);
     }
 
-    // Check if there is a pending action queued for this tab
+    // Check if there is an active pending delivery promise waiting for this tabID
+    if (tabID && this.pendingDeliveries.has(tabID)) {
+      const delivery = this.pendingDeliveries.get(tabID)!;
+      this.pendingDeliveries.delete(tabID);
+      clearTimeout(delivery.timer);
+      try {
+        const delivered =
+          typeof panel.handlePendingAction === "function"
+            ? panel.handlePendingAction(delivery.action)
+            : false;
+        dump(`[PaperPilot] ask action delivered via pending delivery (result=${delivered})\n`);
+        delivery.resolve(!!delivered);
+      } catch (e) {
+        dump(`[PaperPilot] ERROR in pending delivery execution: ${e}\n`);
+        delivery.resolve(false);
+      }
+      return;
+    }
+
+    // Secondary race fallback
     const actionKey = tabID || Array.from(this.pendingActions.keys())[0];
     if (actionKey && this.pendingActions.has(actionKey)) {
       const action = this.pendingActions.get(actionKey)!;
@@ -48,7 +77,7 @@ export class PaperPilotSidebarController {
       try {
         if (typeof panel.handlePendingAction === "function") {
           panel.handlePendingAction(action);
-          dump("[PaperPilot] ask action delivered\n");
+          dump("[PaperPilot] action delivered from pending actions\n");
         }
       } catch (e) {
         dump(`[PaperPilot] ERROR consuming pending action: ${e}\n`);
@@ -60,15 +89,31 @@ export class PaperPilotSidebarController {
     if (tabID && this.panelsByTabID.get(tabID) === panel) {
       this.panelsByTabID.delete(tabID);
     }
+    for (const [id, p] of this.panelsByTabID.entries()) {
+      if (p === panel) {
+        this.panelsByTabID.delete(id);
+      }
+    }
+  }
+
+  static async waitForPanel(tabID: string, timeoutMs = 1500): Promise<any> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const p = this.panelsByTabID.get(tabID);
+      if (p) return p;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return null;
   }
 
   /**
-   * Dispatches an "ask" action:
-   * 1. Records pending action for current reader tab
-   * 2. Opens ContextPane & sets mode='item'
-   * 3. Retrieves reader item-details context with retry
-   * 4. Scrolls smoothly to PaperPilot section
-   * 5. Delivers pending quote & focuses input
+   * Dispatches an "ask" action with strict end-to-end verification.
+   * Returns true ONLY if:
+   * 1. Reader itemDetails found
+   * 2. PaperPilot section scrolled
+   * 3. Target tab SidebarPanel found
+   * 4. panel.handlePendingAction(action) executes and returns true
+   * 5. Quote banner displayed and input focused
    */
   static async openAsk(options: {
     selectedText: string;
@@ -91,18 +136,12 @@ export class PaperPilotSidebarController {
       tabID,
     };
 
-    if (tabID) {
-      this.pendingActions.set(tabID, action);
-    } else {
-      this.pendingActions.set("default", action);
-    }
-
     try {
       // 1. Expand ContextPane
       this.expandContextPane(win);
       dump("[PaperPilot] context pane expanded\n");
 
-      // 2. Retrieve reader item-details context with retry (max 10 * 50ms)
+      // 2. Retrieve reader item-details context with retry
       const itemDetails = await this.getItemDetailsContextWithRetry(win, tabID);
       if (!itemDetails) {
         dump(`[PaperPilot] ERROR: current reader item-details not found for tabID=${tabID}\n`);
@@ -117,31 +156,59 @@ export class PaperPilotSidebarController {
       }
 
       // 4. Deliver action to current panel
-      let targetPanel = (tabID ? this.panelsByTabID.get(tabID) : null) || itemDetails._paperPilotPanel;
+      let targetPanel = tabID ? this.panelsByTabID.get(tabID) : null;
 
-      // Small retry loop (max 5 * 50ms) if onRender has not executed yet
       if (!targetPanel) {
-        for (let i = 0; i < 5; i++) {
-          targetPanel = (tabID ? this.panelsByTabID.get(tabID) : null) || itemDetails._paperPilotPanel;
-          if (targetPanel) break;
-          await new Promise((resolve) => setTimeout(resolve, 50));
+        // Prepare delivery promise before waiting for panel to attach
+        const deliveryPromise = new Promise<boolean>((resolve) => {
+          const timer = setTimeout(() => {
+            if (tabID && this.pendingDeliveries.has(tabID)) {
+              this.pendingDeliveries.delete(tabID);
+            }
+            dump(`[PaperPilot] Delivery timeout for tabID=${tabID}\n`);
+            resolve(false);
+          }, 1500);
+
+          if (tabID) {
+            this.pendingDeliveries.set(tabID, { action, resolve, timer });
+          }
+        });
+
+        // Wait for panel to appear via polling or onRender
+        targetPanel = await this.waitForPanel(tabID, 1500);
+
+        if (targetPanel && typeof targetPanel.handlePendingAction === "function") {
+          // If panel appeared, deliver directly if delivery promise not already settled
+          if (tabID && this.pendingDeliveries.has(tabID)) {
+            const delivery = this.pendingDeliveries.get(tabID)!;
+            this.pendingDeliveries.delete(tabID);
+            clearTimeout(delivery.timer);
+            const delivered = targetPanel.handlePendingAction(action);
+            delivery.resolve(!!delivered);
+            return !!delivered;
+          }
         }
+
+        const delivered = await deliveryPromise;
+        if (!delivered) {
+          dump(`[PaperPilot] ERROR: PaperPilot panel not rendered or delivery failed for tab ${tabID}\n`);
+          throw new Error(`PaperPilot panel not rendered for tab ${tabID}`);
+        }
+        return true;
       }
 
-      if (targetPanel && typeof targetPanel.handlePendingAction === "function") {
-        targetPanel.handlePendingAction(action);
-        if (tabID) this.pendingActions.delete(tabID);
+      // Panel already available, execute synchronously
+      if (typeof targetPanel.handlePendingAction === "function") {
+        const delivered = targetPanel.handlePendingAction(action);
+        if (!delivered) {
+          dump("[PaperPilot] ERROR: handlePendingAction returned false\n");
+          return false;
+        }
         dump("[PaperPilot] ask action delivered\n");
         return true;
       }
 
-      // If panel is still queued for upcoming onRender
-      if (this.pendingActions.has(tabID) || this.pendingActions.has("default")) {
-        dump("[PaperPilot] ask action delivered to pending queue\n");
-        return true;
-      }
-
-      dump("[PaperPilot] ERROR: Target panel not found for ask action delivery\n");
+      dump("[PaperPilot] ERROR: Target panel has no handlePendingAction\n");
       return false;
     } catch (err: any) {
       dump(`[PaperPilot] ERROR in openAsk: ${err.message || err}\n`);
@@ -173,10 +240,6 @@ export class PaperPilotSidebarController {
       tabID,
     };
 
-    if (tabID) {
-      this.pendingActions.set(tabID, action);
-    }
-
     try {
       this.expandContextPane(win);
       dump("[PaperPilot] context pane expanded\n");
@@ -187,23 +250,19 @@ export class PaperPilotSidebarController {
         await itemDetails.scrollToPane(this.sectionKey, "smooth");
       }
 
-      let targetPanel = (tabID ? this.panelsByTabID.get(tabID) : null) || itemDetails?._paperPilotPanel;
+      let targetPanel = (tabID ? this.panelsByTabID.get(tabID) : null) || (await this.waitForPanel(tabID, 1000));
       if (targetPanel && typeof targetPanel.handlePendingAction === "function") {
-        targetPanel.handlePendingAction(action);
-        if (tabID) this.pendingActions.delete(tabID);
+        const delivered = targetPanel.handlePendingAction(action);
         dump("[PaperPilot] interpret action delivered\n");
-        return true;
+        return !!delivered;
       }
-      return true;
+      return false;
     } catch (err: any) {
       dump(`[PaperPilot] ERROR in openInterpret: ${err.message || err}\n`);
       throw err;
     }
   }
 
-  /**
-   * Reliably expands Zotero ContextPane and sets mode to 'item'.
-   */
   private static expandContextPane(win: any): void {
     if (win.ZoteroContextPane) {
       if (win.ZoteroContextPane.splitter) {
@@ -221,16 +280,12 @@ export class PaperPilotSidebarController {
     }
   }
 
-  /**
-   * Retrieves current reader tab's item details context with bounded retry.
-   */
   private static async getItemDetailsContextWithRetry(win: any, tabID: string): Promise<any> {
     for (let i = 0; i < 10; i++) {
       if (win.ZoteroContextPane?.context?._getItemContext) {
         const itemDetails = win.ZoteroContextPane.context._getItemContext(tabID);
         if (itemDetails) return itemDetails;
       }
-      // Fallback: active itemDetails if tabID lookup returned null
       if (win.ZoteroContextPane?.context?._activeItemContext) {
         return win.ZoteroContextPane.context._activeItemContext;
       }

@@ -10,6 +10,7 @@ export interface PluginPreferences {
   aiProviders: Record<string, AIProviderConfig>;
   defaultDomain: DomainType;
   customPromptTemplate: string;
+  interpretationPromptOverrides?: Partial<Record<DomainType, string>>;
 }
 
 export const DEFAULT_AI_PROVIDERS: Record<string, AIProviderConfig> = {
@@ -88,6 +89,7 @@ export const DEFAULT_PREFS: PluginPreferences = {
   aiProviders: DEFAULT_AI_PROVIDERS,
   defaultDomain: "general",
   customPromptTemplate: "请结合上下文对以下内容进行深度学术解读，并解析关键术语：\n\n{text}",
+  interpretationPromptOverrides: {},
 };
 
 export class PreferenceManager {
@@ -103,6 +105,10 @@ export class PreferenceManager {
           this.cachedPrefs = {
             ...DEFAULT_PREFS,
             ...parsed,
+            interpretationPromptOverrides: {
+              ...(DEFAULT_PREFS.interpretationPromptOverrides || {}),
+              ...(parsed.interpretationPromptOverrides || {}),
+            },
             aiProviders: {
               ...DEFAULT_AI_PROVIDERS,
               ...(parsed.aiProviders || {}),

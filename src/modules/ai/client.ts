@@ -100,6 +100,13 @@ export class AIClient {
       return await callNonStreaming();
     }
 
+    const startTime = Date.now();
+    let firstTokenTime: number | null = null;
+    let totalChars = 0;
+    let receivedAnyDelta = false;
+
+    dump("[PaperPilot AI] request started\n");
+
     try {
       const response = await fetch(endpoint, {
         method: "POST",
@@ -147,6 +154,12 @@ export class AIClient {
             const parsed = JSON.parse(dataStr);
             const delta = parsed.choices?.[0]?.delta?.content || "";
             if (delta) {
+              if (!receivedAnyDelta) {
+                receivedAnyDelta = true;
+                firstTokenTime = Date.now();
+                dump(`[PaperPilot AI] first token after ${firstTokenTime - startTime}ms\n`);
+              }
+              totalChars += delta.length;
               accumulated += delta;
               options?.onChunk?.(delta, accumulated);
             }
@@ -156,9 +169,17 @@ export class AIClient {
         }
       }
 
+      const totalTime = Date.now() - startTime;
+      dump(`[PaperPilot AI] stream finished after ${totalTime}ms\n`);
+      dump(`[PaperPilot AI] total chars=${totalChars}\n`);
+
       return accumulated;
     } catch (streamErr: any) {
-      dump(`[PaperPilot] Streaming failed or unsupported: ${streamErr.message || streamErr}. Downgrading to non-streaming...\n`);
+      if (receivedAnyDelta) {
+        dump(`[PaperPilot AI] Streaming interrupted after receiving ${totalChars} chars: ${streamErr.message || streamErr}\n`);
+        throw new Error(`Streaming interrupted after receiving partial response: ${streamErr.message || streamErr}`);
+      }
+      dump(`[PaperPilot] Streaming failed before tokens: ${streamErr.message || streamErr}. Downgrading to non-streaming...\n`);
       return await callNonStreaming();
     }
   }

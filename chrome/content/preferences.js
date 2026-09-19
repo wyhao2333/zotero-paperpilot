@@ -185,24 +185,61 @@
 
       const domainPromptDrafts = {};
 
+      const checkPromptApi = () => {
+        const zotero = getZotero();
+        const hasPromptApi =
+          typeof zotero?.PaperPilot?.getInterpretationPromptTemplate === "function" &&
+          typeof zotero?.PaperPilot?.getDefaultInterpretationPromptTemplate === "function";
+
+        if (!hasPromptApi) {
+          dump("[PaperPilot Prefs] ERROR: Prompt API unavailable\n");
+          if (promptWarningLabel) {
+            promptWarningLabel.textContent = "❌ 无法读取领域 Prompt，请重新打开设置或重启 Zotero。";
+            promptWarningLabel.style.display = "block";
+          }
+          return false;
+        }
+
+        // Self-check distinctness across default domain templates
+        const defGen = zotero.PaperPilot.getDefaultInterpretationPromptTemplate("general");
+        const defCs = zotero.PaperPilot.getDefaultInterpretationPromptTemplate("cs_ai");
+        const defMed = zotero.PaperPilot.getDefaultInterpretationPromptTemplate("med_bio");
+        const defEcon = zotero.PaperPilot.getDefaultInterpretationPromptTemplate("econ_social");
+        const defEng = zotero.PaperPilot.getDefaultInterpretationPromptTemplate("engineering");
+
+        if (defGen === defCs || defGen === defMed || defCs === defMed) {
+          dump("[PaperPilot Prefs] ERROR: Default domain prompt templates are identical across distinct domains!\n");
+        }
+
+        return true;
+      };
+
+      checkPromptApi();
+
       const getDomainPromptTemplate = (domain) => {
         const zotero = getZotero();
-        if (zotero?.PaperPilot?.getInterpretationPromptTemplate) {
+        if (typeof zotero?.PaperPilot?.getInterpretationPromptTemplate === "function") {
           try {
             return zotero.PaperPilot.getInterpretationPromptTemplate(domain);
-          } catch (e) {}
+          } catch (e) {
+            dump("[PaperPilot Prefs] ERROR in getInterpretationPromptTemplate: " + e + "\n");
+          }
         }
-        return "请对以下文献选段进行专业解读：\n\n{text}";
+        dump("[PaperPilot Prefs] ERROR: Prompt API unavailable\n");
+        return null;
       };
 
       const getDefaultDomainPromptTemplate = (domain) => {
         const zotero = getZotero();
-        if (zotero?.PaperPilot?.getDefaultInterpretationPromptTemplate) {
+        if (typeof zotero?.PaperPilot?.getDefaultInterpretationPromptTemplate === "function") {
           try {
             return zotero.PaperPilot.getDefaultInterpretationPromptTemplate(domain);
-          } catch (e) {}
+          } catch (e) {
+            dump("[PaperPilot Prefs] ERROR in getDefaultInterpretationPromptTemplate: " + e + "\n");
+          }
         }
-        return "请对以下文献选段进行专业解读：\n\n{text}";
+        dump("[PaperPilot Prefs] ERROR: Prompt API unavailable\n");
+        return null;
       };
 
       let currentDomainKey = domainSelect ? domainSelect.value : "general";
@@ -219,6 +256,17 @@
           if (customPromptArea) customPromptArea.value = val;
         } else {
           const tpl = getDomainPromptTemplate(domain);
+          if (tpl === null) {
+            if (customPromptArea) {
+              customPromptArea.value = "";
+              customPromptArea.placeholder = "无法读取领域 Prompt，请重新打开设置或重启 Zotero。";
+            }
+            if (promptWarningLabel) {
+              promptWarningLabel.textContent = "❌ 无法读取领域 Prompt，请重新打开设置或重启 Zotero。";
+              promptWarningLabel.style.display = "block";
+            }
+            return;
+          }
           domainPromptDrafts[domain] = tpl;
           if (customPromptArea) customPromptArea.value = tpl;
         }
@@ -237,6 +285,14 @@
 
       resetDomainPromptBtn?.addEventListener("click", () => {
         const defaultTpl = getDefaultDomainPromptTemplate(currentDomainKey);
+        if (defaultTpl === null) {
+          dump("[PaperPilot Prefs] ERROR: Prompt API unavailable on reset\n");
+          if (promptWarningLabel) {
+            promptWarningLabel.textContent = "❌ 无法读取领域 Prompt，请重新打开设置或重启 Zotero。";
+            promptWarningLabel.style.display = "block";
+          }
+          return;
+        }
         if (customPromptArea) {
           customPromptArea.value = defaultTpl;
         }

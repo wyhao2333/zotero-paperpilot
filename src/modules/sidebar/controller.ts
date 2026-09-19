@@ -40,7 +40,7 @@ export class PaperPilotSidebarController {
    */
   static attachPanel(
     panel: any,
-    context?: { tabID?: string; body?: any; itemDetails?: any; item?: any }
+    context?: { tabID?: string; body?: any; itemDetails?: any; item?: any; mount?: any }
   ): void {
     const tabID = context?.tabID || "";
     if (tabID) {
@@ -48,6 +48,10 @@ export class PaperPilotSidebarController {
     }
     if (context?.body) {
       this.panelsByBody.set(context.body, panel);
+      (context.body as any)._paperPilotPanel = panel;
+    }
+    if (context?.mount) {
+      (context.mount as any)._paperPilotPanel = panel;
     }
 
     // Check if there is an active pending delivery promise waiting for this tabID
@@ -58,10 +62,10 @@ export class PaperPilotSidebarController {
       try {
         const delivered =
           typeof panel.handlePendingAction === "function"
-            ? panel.handlePendingAction(delivery.action)
+            ? panel.handlePendingAction(delivery.action) === true
             : false;
         dump(`[PaperPilot] ask action delivered via pending delivery (result=${delivered})\n`);
-        delivery.resolve(!!delivered);
+        delivery.resolve(delivered);
       } catch (e) {
         dump(`[PaperPilot] ERROR in pending delivery execution: ${e}\n`);
         delivery.resolve(false);
@@ -108,27 +112,22 @@ export class PaperPilotSidebarController {
 
   /**
    * Dispatches an "ask" action with strict end-to-end verification.
-   * Returns true ONLY if:
-   * 1. Reader itemDetails found
-   * 2. PaperPilot section scrolled
-   * 3. Target tab SidebarPanel found
-   * 4. panel.handlePendingAction(action) executes and returns true
-   * 5. Quote banner displayed and input focused
+   * Directly locates the actual Reader itemDetails and PaperPilot section mount.
    */
   static async openAsk(options: {
     selectedText: string;
     reader?: any;
     attachmentID?: number;
   }): Promise<boolean> {
-    dump("[PaperPilot] ask requested\n");
-
     const win = typeof Zotero !== "undefined" && Zotero.getMainWindow ? Zotero.getMainWindow() : null;
     if (!win) {
-      dump("[PaperPilot] ERROR: Zotero main window not found\n");
+      dump("[PaperPilot Ask] ERROR: Zotero main window not found\n");
       throw new Error("Zotero main window not found");
     }
 
     const tabID = win.Zotero_Tabs?.selectedID || (options.reader?._tabID ? String(options.reader._tabID) : "");
+    dump(`[PaperPilot Ask] selected tabID=${tabID}\n`);
+
     const action: PendingAction = {
       type: "ask",
       selectedText: options.selectedText,
@@ -136,84 +135,94 @@ export class PaperPilotSidebarController {
       tabID,
     };
 
-    try {
-      // 1. Expand ContextPane
-      this.expandContextPane(win);
-      dump("[PaperPilot] context pane expanded\n");
+    // 1. Expand ContextPane
+    this.expandContextPane(win);
 
-      // 2. Retrieve reader item-details context with retry
-      const itemDetails = await this.getItemDetailsContextWithRetry(win, tabID);
-      if (!itemDetails) {
-        dump(`[PaperPilot] ERROR: current reader item-details not found for tabID=${tabID}\n`);
-        throw new Error(`Reader item-details context not found for tabID=${tabID}`);
-      }
-      dump("[PaperPilot] current reader item-details found\n");
+    // 2. Retrieve reader item-details context with bounded retry (10 * 50ms)
+    const itemDetails = await this.getItemDetailsContextWithRetry(win, tabID);
+    const itemDetailsFound = !!itemDetails;
+    dump(`[PaperPilot Ask] itemDetails found=${itemDetailsFound}\n`);
+    dump(`[PaperPilot Ask] sectionKey=${this.sectionKey}\n`);
 
-      // 3. Scroll to PaperPilot section
-      dump(`[PaperPilot] scrolling to pane: ${this.sectionKey}\n`);
-      if (typeof itemDetails.scrollToPane === "function") {
-        await itemDetails.scrollToPane(this.sectionKey, "smooth");
-      }
-
-      // 4. Deliver action to current panel
-      let targetPanel = tabID ? this.panelsByTabID.get(tabID) : null;
-
-      if (!targetPanel) {
-        // Prepare delivery promise before waiting for panel to attach
-        const deliveryPromise = new Promise<boolean>((resolve) => {
-          const timer = setTimeout(() => {
-            if (tabID && this.pendingDeliveries.has(tabID)) {
-              this.pendingDeliveries.delete(tabID);
-            }
-            dump(`[PaperPilot] Delivery timeout for tabID=${tabID}\n`);
-            resolve(false);
-          }, 1500);
-
-          if (tabID) {
-            this.pendingDeliveries.set(tabID, { action, resolve, timer });
-          }
-        });
-
-        // Wait for panel to appear via polling or onRender
-        targetPanel = await this.waitForPanel(tabID, 1500);
-
-        if (targetPanel && typeof targetPanel.handlePendingAction === "function") {
-          // If panel appeared, deliver directly if delivery promise not already settled
-          if (tabID && this.pendingDeliveries.has(tabID)) {
-            const delivery = this.pendingDeliveries.get(tabID)!;
-            this.pendingDeliveries.delete(tabID);
-            clearTimeout(delivery.timer);
-            const delivered = targetPanel.handlePendingAction(action);
-            delivery.resolve(!!delivered);
-            return !!delivered;
-          }
-        }
-
-        const delivered = await deliveryPromise;
-        if (!delivered) {
-          dump(`[PaperPilot] ERROR: PaperPilot panel not rendered or delivery failed for tab ${tabID}\n`);
-          throw new Error(`PaperPilot panel not rendered for tab ${tabID}`);
-        }
-        return true;
-      }
-
-      // Panel already available, execute synchronously
-      if (typeof targetPanel.handlePendingAction === "function") {
-        const delivered = targetPanel.handlePendingAction(action);
-        if (!delivered) {
-          dump("[PaperPilot] ERROR: handlePendingAction returned false\n");
-          return false;
-        }
-        dump("[PaperPilot] ask action delivered\n");
-        return true;
-      }
-
-      dump("[PaperPilot] ERROR: Target panel has no handlePendingAction\n");
-      return false;
-    } catch (err: any) {
-      dump(`[PaperPilot] ERROR in openAsk: ${err.message || err}\n`);
-      throw err;
+    if (!itemDetails) {
+      dump("[PaperPilot Ask] pane found=false\n");
+      dump("[PaperPilot Ask] mount found=false\n");
+      dump("[PaperPilot Ask] panel instance found=false\n");
+      dump("[PaperPilot Ask] quote delivered=false\n");
+      throw new Error(`Reader item-details context not found for tabID=${tabID}`);
     }
+
+    // 3. Scroll to PaperPilot section
+    if (typeof itemDetails.scrollToPane === "function") {
+      try {
+        await itemDetails.scrollToPane(this.sectionKey, "smooth");
+      } catch (scrollErr) {
+        dump(`[PaperPilot Ask] Warning: scrollToPane failed: ${scrollErr}\n`);
+      }
+    }
+
+    // 4. Locate pane, mount, and panel instance directly from current Reader DOM with bounded wait (1500ms)
+    let pane: any = null;
+    let mount: any = null;
+    let panel: any = null;
+
+    const startTime = Date.now();
+    while (Date.now() - startTime < 1500) {
+      if (typeof itemDetails.getPane === "function") {
+        pane = itemDetails.getPane(this.sectionKey);
+      }
+      if (!pane && typeof itemDetails.querySelector === "function") {
+        pane =
+          itemDetails.querySelector(`[data-section-id="${this.sectionKey}"], #${this.sectionKey}`) ||
+          itemDetails.querySelector("#paperpilot-sidebar-mount")?.closest?.(".item-pane-section");
+      }
+
+      mount =
+        pane?.querySelector?.("#paperpilot-sidebar-mount") ||
+        itemDetails.querySelector?.("#paperpilot-sidebar-mount");
+
+      panel =
+        (mount as any)?._paperPilotPanel ||
+        (mount?.parentElement as any)?._paperPilotPanel ||
+        (pane as any)?._paperPilotPanel ||
+        (tabID ? this.panelsByTabID.get(tabID) : null);
+
+      if (panel) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    const paneFound = !!pane;
+    const mountFound = !!mount;
+    const panelFound = !!panel;
+
+    dump(`[PaperPilot Ask] pane found=${paneFound}\n`);
+    dump(`[PaperPilot Ask] mount found=${mountFound}\n`);
+    dump(`[PaperPilot Ask] panel instance found=${panelFound}\n`);
+
+    if (!panel) {
+      dump("[PaperPilot Ask] quote delivered=false\n");
+      if (paneFound && !mountFound) {
+        throw new Error(`PaperPilot pane found for sectionKey=${this.sectionKey} but mount element not found`);
+      }
+      if (mountFound && !panelFound) {
+        throw new Error(`PaperPilot mount element found but panel instance _paperPilotPanel not attached`);
+      }
+      throw new Error(`PaperPilot panel not found in reader itemDetails for tabID=${tabID}`);
+    }
+
+    // 5. Deliver quote strictly and check result
+    let delivered = false;
+    if (typeof panel.handlePendingAction === "function") {
+      delivered = panel.handlePendingAction(action) === true;
+    }
+
+    dump(`[PaperPilot Ask] quote delivered=${delivered}\n`);
+
+    if (!delivered) {
+      throw new Error("Panel handlePendingAction returned false for quote delivery");
+    }
+
+    return true;
   }
 
   /**
@@ -224,8 +233,6 @@ export class PaperPilotSidebarController {
     reader?: any;
     attachmentID?: number;
   }): Promise<boolean> {
-    dump("[PaperPilot] interpret requested\n");
-
     const win = typeof Zotero !== "undefined" && Zotero.getMainWindow ? Zotero.getMainWindow() : null;
     if (!win) {
       dump("[PaperPilot] ERROR: Zotero main window not found\n");
@@ -242,19 +249,38 @@ export class PaperPilotSidebarController {
 
     try {
       this.expandContextPane(win);
-      dump("[PaperPilot] context pane expanded\n");
 
       const itemDetails = await this.getItemDetailsContextWithRetry(win, tabID);
       if (itemDetails && typeof itemDetails.scrollToPane === "function") {
-        dump(`[PaperPilot] scrolling to pane: ${this.sectionKey}\n`);
         await itemDetails.scrollToPane(this.sectionKey, "smooth");
       }
 
-      let targetPanel = (tabID ? this.panelsByTabID.get(tabID) : null) || (await this.waitForPanel(tabID, 1000));
-      if (targetPanel && typeof targetPanel.handlePendingAction === "function") {
-        const delivered = targetPanel.handlePendingAction(action);
-        dump("[PaperPilot] interpret action delivered\n");
-        return !!delivered;
+      let pane: any = null;
+      let mount: any = null;
+      let panel: any = null;
+
+      const startTime = Date.now();
+      while (Date.now() - startTime < 1200) {
+        if (typeof itemDetails?.getPane === "function") {
+          pane = itemDetails.getPane(this.sectionKey);
+        }
+        mount =
+          pane?.querySelector?.("#paperpilot-sidebar-mount") ||
+          itemDetails?.querySelector?.("#paperpilot-sidebar-mount");
+
+        panel =
+          (mount as any)?._paperPilotPanel ||
+          (pane as any)?._paperPilotPanel ||
+          (tabID ? this.panelsByTabID.get(tabID) : null);
+
+        if (panel) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      if (panel && typeof panel.handlePendingAction === "function") {
+        const delivered = panel.handlePendingAction(action) === true;
+        dump(`[PaperPilot] interpret action delivered=${delivered}\n`);
+        return delivered;
       }
       return false;
     } catch (err: any) {

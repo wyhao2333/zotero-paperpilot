@@ -16,3 +16,11 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# Secrets & Environment
+.env
+.env.*
+!.env.example
+secrets.json
+local-secrets.json
+credentials.json

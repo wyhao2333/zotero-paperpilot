@@ -181,34 +181,49 @@ export class PaperPilotPlugin {
           orderable: false,
         },
         bodyXHTML:
+          `<html:style xmlns:html="http://www.w3.org/1999/xhtml">@import url("${this.rootURI}addon/style.css");</html:style>` +
           '<html:div xmlns:html="http://www.w3.org/1999/xhtml" id="paperpilot-sidebar-mount" style="min-height:420px; height:100%; display:flex; flex-direction:column;"></html:div>',
         onItemChange: ({ tabType, item, setEnabled }: any) => {
           setEnabled(tabType === "reader");
           return true;
         },
         onRender: ({ body, item }: any) => {
+          // Self-contained stylesheet injection into pane container
+          if (!body.querySelector("style[data-paperpilot-style]")) {
+            try {
+              const doc = body.ownerDocument;
+              const style = doc.createElementNS("http://www.w3.org/1999/xhtml", "style");
+              style.setAttribute("data-paperpilot-style", "true");
+              style.textContent = `@import url("${this.rootURI}addon/style.css");`;
+              body.insertBefore(style, body.firstChild);
+            } catch (e) {}
+          }
+
           const itemDetails = body.closest("item-details") as any;
           const tabID = itemDetails?.tabID || itemDetails?.dataset?.tabId || "";
           if (!tabID) {
             dump("[PaperPilot] ERROR: Cannot resolve tabID from item-details during PaperPilot onRender\n");
           }
           const mount = body.querySelector("#paperpilot-sidebar-mount") || body;
-          let panel: SidebarPanel = (body as any)._paperPilotPanel;
+          let panel: SidebarPanel = (mount as any)._paperPilotPanel || (body as any)._paperPilotPanel;
           if (!panel) {
             panel = new SidebarPanel(mount);
-            (body as any)._paperPilotPanel = panel;
           }
-          PaperPilotSidebarController.attachPanel(panel, { tabID, body, itemDetails, item });
+          (mount as any)._paperPilotPanel = panel;
+          (body as any)._paperPilotPanel = panel;
+          PaperPilotSidebarController.attachPanel(panel, { tabID, body, itemDetails, item, mount });
         },
         onDestroy: ({ body }: any) => {
           try {
             const itemDetails = body.closest("item-details") as any;
             const tabID = itemDetails?.tabID || itemDetails?.dataset?.tabId || "";
-            const panel = (body as any)?._paperPilotPanel;
+            const mount = body?.querySelector?.("#paperpilot-sidebar-mount");
+            const panel = (mount as any)?._paperPilotPanel || (body as any)?._paperPilotPanel;
             if (panel) {
               PaperPilotSidebarController.detachPanel(panel, tabID);
-              delete (body as any)._paperPilotPanel;
             }
+            if (mount) delete (mount as any)._paperPilotPanel;
+            delete (body as any)._paperPilotPanel;
             dump(`[PaperPilot] item pane section destroyed for tabID=${tabID}\n`);
           } catch (e) {
             dump(`[PaperPilot] Error in section onDestroy: ${e}\n`);

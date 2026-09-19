@@ -73,6 +73,7 @@ async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
   try {
     if (typeof Zotero !== "undefined" && Zotero.PreferencePanes?.register) {
       const paneID = await Zotero.PreferencePanes.register({
+        id: "paperpilot-preferences",
         pluginID: "paperpilot@zotero.org",
         src: rootURI + "chrome/content/preferences.xhtml",
         scripts: [rootURI + "chrome/content/preferences.js"],

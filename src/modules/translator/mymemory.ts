@@ -49,9 +49,28 @@ export class MyMemoryTranslator implements ITranslatorService {
         data = await response.json();
       }
 
-      if (data?.responseData?.translatedText) {
+      if (data?.responseStatus && data.responseStatus !== 200 && data.responseStatus !== "200") {
+        throw new Error(`MyMemory API 响应错误 (状态码 ${data.responseStatus}): ${data.responseDetails || ""}`);
+      }
+
+      const translatedText = data?.responseData?.translatedText;
+      if (typeof translatedText === "string") {
+        const upper = translatedText.toUpperCase();
+        const knownErrors = [
+          "QUERY LENGTH LIMIT EXCEEDED",
+          "MAX ALLOWED QUERY",
+          "INVALID SOURCE LANGUAGE",
+          "INVALID TARGET LANGUAGE",
+          "MYMEMORY WARNING",
+          "PLEASE SELECT TWO DISTINCT LANGUAGES",
+        ];
+        for (const errSign of knownErrors) {
+          if (upper.includes(errSign)) {
+            throw new Error(`MyMemory 服务拒绝: ${translatedText}`);
+          }
+        }
         dump("[PaperPilot] translation completed (mymemory)\n");
-        return data.responseData.translatedText;
+        return translatedText;
       }
       throw new Error("接口返回数据格式异常");
     } catch (e: any) {

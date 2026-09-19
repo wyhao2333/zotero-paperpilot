@@ -1,6 +1,6 @@
 <vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
       xmlns:html="http://www.w3.org/1999/xhtml"
-      onload="window.PaperPilot_Preferences &amp;&amp; window.PaperPilot_Preferences.init(window)">
+      onload="((typeof Zotero !== 'undefined' &amp;&amp; Zotero.PaperPilot &amp;&amp; Zotero.PaperPilot.onPrefsLoad) ? Zotero.PaperPilot.onPrefsLoad(window) : (window.PaperPilot_Preferences &amp;&amp; window.PaperPilot_Preferences.init(window)))">
 
   <groupbox>
     <label><html:h2 style="font-size:15px; font-weight:600; margin:4px 0 8px 0; color:#2563eb;">🌐 划词翻译设置</html:h2></label>

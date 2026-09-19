@@ -136,14 +136,16 @@
     },
 
     init(win) {
+      dump("[PaperPilot Prefs] pane load event\n");
       const doc = win?.document || (typeof document !== "undefined" ? document : null);
       if (!doc) {
-        dump("[PaperPilot Prefs] No document found for init.\n");
+        dump("[PaperPilot Prefs] ERROR: No document found for init.\n");
         return;
       }
 
       const saveBtn = doc.getElementById("pp-pref-btn-save");
       if (!saveBtn) {
+        dump("[PaperPilot Prefs] ERROR: Save button #pp-pref-btn-save not found in document\n");
         return;
       }
 
@@ -153,7 +155,7 @@
       }
       saveBtn.dataset.ppInitialized = "true";
 
-      dump("[PaperPilot Prefs] Initializing preferences pane controls...\n");
+      dump("[PaperPilot Prefs] controls found\n");
 
       let prefs = this.getPrefs();
 
@@ -278,29 +280,61 @@
         }
 
         try {
-          const res = await fetch(`${baseUrl}/chat/completions`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              model: model,
-              messages: [{ role: "user", content: "Hi" }],
-              max_tokens: 5,
-            }),
+          const endpoint = `${baseUrl}/chat/completions`;
+          const reqHeaders = {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          };
+          const reqBody = JSON.stringify({
+            model: model,
+            messages: [{ role: "user", content: "Hi" }],
+            max_tokens: 5,
           });
 
-          if (res.ok) {
-            if (testResultLabel) {
-              testResultLabel.textContent = "✅ 连接成功！API 正常响应 (HTTP 200)";
-              testResultLabel.style.color = "#16a34a";
+          const zotero = getZotero();
+          if (zotero && zotero.HTTP && typeof zotero.HTTP.request === "function") {
+            const xhr = await zotero.HTTP.request("POST", endpoint, {
+              headers: reqHeaders,
+              body: reqBody,
+              responseType: "json",
+              timeout: 30000,
+            });
+
+            if (xhr && xhr.status >= 200 && xhr.status < 300) {
+              if (testResultLabel) {
+                testResultLabel.textContent = `✅ 连接成功！API 正常响应 (HTTP ${xhr.status})`;
+                testResultLabel.style.color = "#16a34a";
+              }
+            } else {
+              const status = xhr ? xhr.status : "unknown";
+              let errTxt = xhr ? xhr.responseText || "" : "";
+              try {
+                const errJson = xhr?.response || (xhr?.responseText ? JSON.parse(xhr.responseText) : null);
+                if (errJson?.error?.message) errTxt = errJson.error.message;
+              } catch (e) {}
+              if (testResultLabel) {
+                testResultLabel.textContent = `❌ 请求失败 (HTTP ${status}): ${errTxt.slice(0, 100)}`;
+                testResultLabel.style.color = "#dc2626";
+              }
             }
           } else {
-            const errTxt = await res.text().catch(() => "");
-            if (testResultLabel) {
-              testResultLabel.textContent = `❌ 请求失败 (HTTP ${res.status}): ${errTxt.slice(0, 100)}`;
-              testResultLabel.style.color = "#dc2626";
+            const res = await fetch(endpoint, {
+              method: "POST",
+              headers: reqHeaders,
+              body: reqBody,
+            });
+
+            if (res.ok) {
+              if (testResultLabel) {
+                testResultLabel.textContent = "✅ 连接成功！API 正常响应 (HTTP 200)";
+                testResultLabel.style.color = "#16a34a";
+              }
+            } else {
+              const errTxt = await res.text().catch(() => "");
+              if (testResultLabel) {
+                testResultLabel.textContent = `❌ 请求失败 (HTTP ${res.status}): ${errTxt.slice(0, 100)}`;
+                testResultLabel.style.color = "#dc2626";
+              }
             }
           }
         } catch (err) {
@@ -311,7 +345,7 @@
         }
       });
 
-      dump("[PaperPilot Prefs] Event listeners attached successfully.\n");
+      dump("[PaperPilot Prefs] init complete\n");
     },
   };
 

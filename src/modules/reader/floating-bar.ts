@@ -205,7 +205,19 @@ export class FloatingBarManager {
         if (bodyEl) bodyEl.innerHTML = "<em>正在翻译...</em>";
 
         try {
-          const translated = await TranslatorManager.translate(cleanText);
+          const translated = await TranslatorManager.translate(cleanText, {
+            onProgress: (progressMsg, partialText) => {
+              if (bodyEl) {
+                const preview = partialText
+                  ? `<div style="opacity:0.85; margin-top:4px;">${partialText.replace(/\n/g, "<br/>")}</div>`
+                  : "";
+                bodyEl.innerHTML = `
+                  <div style="font-size:11px; color:#2563eb; font-weight:500;">⏳ ${progressMsg}</div>
+                  ${preview}
+                `;
+              }
+            },
+          });
           if (bodyEl) bodyEl.textContent = translated;
           EventBus.emit("action:translated", { source: cleanText, translated });
         } catch (err: any) {
@@ -259,18 +271,34 @@ export class FloatingBarManager {
       btnAsk.addEventListener("click", async (e: MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
-        const origText = btnAsk.textContent;
-        btnAsk.textContent = "已发送到 PaperPilot →";
-        setTimeout(() => {
-          btnAsk.textContent = origText || "❓ 提问";
-        }, 2000);
 
-        const attachmentID = await PaperContextService.resolveAttachmentID(reader);
-        await PaperPilotSidebarController.openAsk({
-          selectedText: cleanText,
-          reader,
-          attachmentID: attachmentID || undefined,
-        });
+        btnAsk.textContent = "正在打开 PaperPilot…";
+
+        try {
+          const attachmentID = await PaperContextService.resolveAttachmentID(reader);
+          const success = await PaperPilotSidebarController.openAsk({
+            selectedText: cleanText,
+            reader,
+            attachmentID: attachmentID || undefined,
+          });
+
+          if (success) {
+            btnAsk.textContent = "已发送到 PaperPilot →";
+            setTimeout(() => {
+              btnAsk.textContent = "❓ 提问";
+            }, 2000);
+          } else {
+            throw new Error("Controller openAsk returned false");
+          }
+        } catch (err: any) {
+          dump(`[PaperPilot] ERROR in ask click: ${err.message || err}\n`);
+          btnAsk.textContent = "❓ 提问";
+          resultCard.style.display = "block";
+          if (titleEl) titleEl.textContent = "PaperPilot · 提问状态";
+          if (bodyEl) {
+            bodyEl.innerHTML = `<span style="color:#dc2626;">❌ 无法打开 PaperPilot 伴读侧栏，请查看 Zotero Debug Output。</span>`;
+          }
+        }
       });
 
       // Auto-translate if enabled

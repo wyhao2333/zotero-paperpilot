@@ -63,6 +63,21 @@ export class PaperPilotPlugin {
     dump("[PaperPilot] PreferenceManager reloaded in live instance.\n");
   }
 
+  onPrefsLoad(win: any): void {
+    dump("[PaperPilot] onPrefsLoad triggered from preference pane\n");
+    const prefObj =
+      (win && win.PaperPilot_Preferences) ||
+      (typeof window !== "undefined" && (window as any).PaperPilot_Preferences) ||
+      (typeof globalThis !== "undefined" && (globalThis as any).PaperPilot_Preferences) ||
+      (typeof Zotero !== "undefined" && (Zotero as any).PaperPilot?.Preferences);
+
+    if (prefObj && typeof prefObj.init === "function") {
+      prefObj.init(win);
+    } else {
+      dump("[PaperPilot] Notice: PaperPilot_Preferences not yet ready in onPrefsLoad\n");
+    }
+  }
+
   private registerSelectionPopupListener(): void {
     if (typeof Zotero === "undefined" || !Zotero.Reader) return;
 
@@ -102,15 +117,22 @@ export class PaperPilotPlugin {
         bodyXHTML: '<html:div xmlns:html="http://www.w3.org/1999/xhtml" id="paperpilot-sidebar-mount" style="min-height:420px; height:100%; display:flex; flex-direction:column;"></html:div>',
         onItemChange: ({ tabType, item, setEnabled }: any) => {
           setEnabled(tabType === "reader");
+          return true;
         },
-        onRender: async ({ body, item }: any) => {
+        onRender: ({ body, item }: any) => {
           const mount = body.querySelector("#paperpilot-sidebar-mount") || body;
           let panel: SidebarPanel = (body as any)._paperPilotPanel;
           if (!panel) {
             panel = new SidebarPanel(mount);
             (body as any)._paperPilotPanel = panel;
           }
-          if (item) {
+          const win = typeof Zotero !== "undefined" && Zotero.getMainWindow ? Zotero.getMainWindow() : null;
+          const tabID = win?.Zotero_Tabs?.selectedID || "";
+          PaperPilotSidebarController.attachPanel(panel, { tabID, body, item });
+        },
+        onAsyncRender: async ({ body, item }: any) => {
+          const panel: SidebarPanel = (body as any)._paperPilotPanel;
+          if (panel && item) {
             const regular = item.isRegularItem?.() ? item : item.parentItem || item;
             const title = regular?.getField ? regular.getField("title") : "文献";
             const attachment = item.isPDFAttachment?.() ? item : await regular?.getBestAttachment?.();

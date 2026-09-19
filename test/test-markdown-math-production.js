@@ -149,4 +149,79 @@ assert(fullNote.endsWith('</div>'), "Full note must end with closing div");
 
 console.log("  PASS: Zotero Note rendering produces valid native math and isolated schema.");
 
+// Test 6: Bare inline math & list items (Real user screenshot case)
+console.log("-> Test 6: Conservative bare-math list items and equations");
+const bareListMd = `
+其中：
+
+- x_k ∈ R^n: 状态向量
+- d_k ∈ R^m: 未知输入向量
+- y_k ∈ R^p: 测量向量
+- w_k ∈ R^n: 过程噪声，协方差矩阵Q_k = E[w_k w_k^T]
+- v_k ∈ R^p: 测量噪声，协方差矩阵R_k = E[v_k v_k^T]
+`;
+
+const bareListHtml = MarkdownMathRenderer.renderForSidebarMarkup(bareListMd);
+
+// MathML should be generated for x_k ∈ R^n, Q_k = E[w_k w_k^T], etc.
+assert(bareListHtml.includes("<math xmlns="), "Bare math list items must produce MathML");
+assert(bareListHtml.includes("paperpilot-math-inline"), "Bare math must produce inline math containers");
+assert(bareListHtml.includes("状态向量"), "Chinese text must be preserved");
+assert(bareListHtml.includes("过程噪声，协方差矩阵"), "Chinese explanation must be preserved");
+assert(!bareListHtml.includes("x_k ∈ R^n:"), "Bare 'x_k ∈ R^n:' should not remain unparsed");
+console.log("  PASS: Bare math list items and embedded equations rendered as MathML.");
+
+// Test 7: Bare block math lines
+console.log("-> Test 7: Bare block math equations");
+const bareBlockMd = `
+系统模型：
+
+x_{k+1} = A_k x_k + G_k d_k + w_k
+
+y_k = C_k x_k + v_k
+`;
+
+const bareBlockHtml = MarkdownMathRenderer.renderForSidebarMarkup(bareBlockMd);
+assert(bareBlockHtml.includes("paperpilot-math-block"), "Standalone bare math equations must produce block math containers");
+assert(bareBlockHtml.includes("<math xmlns="), "Standalone bare math equations must produce MathML");
+assert(bareBlockHtml.includes("系统模型："), "Header must be preserved");
+console.log("  PASS: Standalone bare math lines converted to block MathML.");
+
+// Test 8: Ordinary text rejection (Zero false-positives)
+console.log("-> Test 8: Non-math text rejection (Zero false-positives)");
+const ordinaryMd = `
+Ordinary identifiers:
+paperpilot_runtime_v4
+file_name_v2
+glm-4.5
+api_key
+session_1
+model.predict(x)
+npm run build
+C:\\Users\\foo_bar
+state_space_model
+`;
+
+const ordinaryNormalized = MarkdownMathRenderer.normalizeModelMarkdown(ordinaryMd);
+assert(!ordinaryNormalized.includes("$"), "Ordinary identifiers must not receive dollar signs");
+assert(ordinaryNormalized.includes("paperpilot_runtime_v4"));
+assert(ordinaryNormalized.includes("file_name_v2"));
+assert(ordinaryNormalized.includes("glm-4.5"));
+assert(ordinaryNormalized.includes("api_key"));
+assert(ordinaryNormalized.includes("session_1"));
+assert(ordinaryNormalized.includes("model.predict(x)"));
+assert(ordinaryNormalized.includes("npm run build"));
+assert(ordinaryNormalized.includes("C:\\Users\\foo_bar"));
+assert(ordinaryNormalized.includes("state_space_model"));
+console.log("  PASS: Ordinary technical text preserved without false-positive math conversion.");
+
+// Test 9: Zotero Note export with bare math
+console.log("-> Test 9: Zotero Note export with bare math");
+const noteBareInput = `- x_k ∈ R^n: 状态向量\n\nx_{k+1} = A_k x_k + w_k`;
+const noteBareOutput = MarkdownMathRenderer.renderForZoteroNoteBody(noteBareInput);
+assert(noteBareOutput.includes('<span class="math">'), "Inline bare math in note must become <span class=\"math\">");
+assert(noteBareOutput.includes('<pre class="math">'), "Block bare math in note must become <pre class=\"math\">");
+assert(noteBareOutput.includes("状态向量"), "Note body preserves Chinese prose");
+console.log("  PASS: Zotero Note export converts bare math to native note math elements.");
+
 console.log("=== All Production Markdown & LaTeX Math tests passed successfully ===");

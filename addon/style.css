@@ -141,6 +141,15 @@
 
 /* 3. Sidebar Container */
 .paperpilot-sidebar {
+  --pp-gap: 8px;
+  --pp-pad: 10px;
+  --pp-font-body: 13px;
+  --pp-font-btn: 12px;
+  --pp-font-sub: 11px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -150,39 +159,118 @@
   overflow: hidden;
 }
 
+/* 3.1 Responsive Modes: Normal (>=520px), Compact (360-519px), Narrow (<360px) */
+.paperpilot-sidebar.paperpilot-compact {
+  --pp-gap: 6px;
+  --pp-pad: 8px;
+  --pp-font-body: 12px;
+  --pp-font-btn: 11px;
+  --pp-font-sub: 10.5px;
+}
+
+.paperpilot-sidebar.paperpilot-narrow {
+  --pp-gap: 4px;
+  --pp-pad: 6px;
+  --pp-font-body: 11.5px;
+  --pp-font-btn: 10.5px;
+  --pp-font-sub: 10px;
+}
+
+/* Flexible and constrained container rules */
+.paperpilot-sidebar,
+.paperpilot-header,
+.paperpilot-header-actions,
+.paperpilot-title,
+.paperpilot-paper-title,
+.paperpilot-tabs,
+.paperpilot-tab-content,
+.paperpilot-chat-history,
+.paperpilot-msg,
+.paperpilot-msg-content,
+.msg-content,
+.paperpilot-session-row,
+.paperpilot-domain-row,
+.paperpilot-input-box,
+.paperpilot-textarea,
+.paperpilot-settings {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .paperpilot-header {
-  padding: 10px 14px;
+  padding: var(--pp-pad) 12px;
   border-bottom: 1px solid var(--pp-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--pp-gap);
   background: var(--pp-bg-secondary);
+  flex-wrap: wrap;
 }
 
 .paperpilot-title {
-  font-size: 13px;
+  font-size: var(--pp-font-body);
   font-weight: 600;
   display: flex;
   align-items: center;
   gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.paperpilot-paper-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paperpilot-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
+.paperpilot-sidebar.paperpilot-compact .paperpilot-header-actions,
+.paperpilot-sidebar.paperpilot-narrow .paperpilot-header-actions {
+  gap: 2px;
+}
+
+.paperpilot-sidebar.paperpilot-narrow .paperpilot-header {
+  gap: 4px;
+}
+
+.paperpilot-sidebar.paperpilot-narrow .paperpilot-header-actions {
+  flex: 1 0 100%;
+  justify-content: flex-end;
+}
+
+.paperpilot-sidebar.paperpilot-narrow .paperpilot-btn .btn-text {
+  display: none;
 }
 
 .paperpilot-tabs {
   display: flex;
   border-bottom: 1px solid var(--pp-border);
   background: var(--pp-bg-secondary);
+  min-width: 0;
 }
 
 .paperpilot-tab-item {
   flex: 1;
   text-align: center;
   padding: 8px 4px;
-  font-size: 12px;
+  font-size: var(--pp-font-btn);
   font-weight: 500;
   color: var(--pp-text-muted);
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: all 0.2s;
+  min-width: 0;
 }
 
 .paperpilot-tab-item.active {
@@ -194,15 +282,46 @@
 .paperpilot-tab-content {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: var(--pp-pad);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--pp-gap);
+  min-width: 0;
+}
+
+/* Session and Domain Rows */
+.paperpilot-session-row,
+.paperpilot-domain-row {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-gap);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.paperpilot-session-row select,
+.paperpilot-domain-row select {
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+  box-sizing: border-box;
+}
+
+.paperpilot-sidebar.paperpilot-narrow .paperpilot-session-row {
+  flex-wrap: wrap;
+}
+
+.paperpilot-sidebar.paperpilot-narrow .paperpilot-session-row select {
+  flex: 1 1 100%;
 }
 
 /* 4. Chat Messages */
 .paperpilot-chat-history {
   flex: 1;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -210,11 +329,20 @@
   padding-right: 4px;
 }
 
+.paperpilot-msg,
+.paperpilot-msg-content,
+.msg-content {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .paperpilot-msg {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 13px;
+  font-size: var(--pp-font-body);
   line-height: 1.55;
   animation: pp-fade-in 0.2s ease-out;
 }
@@ -227,41 +355,77 @@
   padding: 8px 12px;
   border-radius: 12px 12px 2px 12px;
   max-width: 88%;
+  overflow-wrap: anywhere;
 }
 
 .paperpilot-msg.ai {
   align-self: flex-start;
   background: var(--pp-bg-secondary);
   border: 1px solid var(--pp-border);
-  padding: 10px 12px;
+  padding: var(--pp-pad) 12px;
   border-radius: 12px 12px 12px 2px;
-  max-width: 95%;
+  width: auto;
+  max-width: 100%;
 }
 
-.paperpilot-msg.ai pre {
+.paperpilot-msg.ai pre:not(.paperpilot-math-block) {
   background: rgba(0,0,0,0.06);
   padding: 6px 8px;
   border-radius: 4px;
+  max-width: 100%;
   overflow-x: auto;
+}
+
+/* Math block and MathML responsiveness */
+.paperpilot-math-block,
+.paperpilot-msg math,
+.paperpilot-msg .katex,
+.paperpilot-msg .katex-display {
+  max-width: 100%;
+}
+
+.paperpilot-math-block,
+.paperpilot-msg .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.paperpilot-sidebar.paperpilot-compact .paperpilot-math-block {
+  font-size: 0.94em;
+}
+
+.paperpilot-sidebar.paperpilot-narrow .paperpilot-math-block {
+  font-size: 0.88em;
+}
+
+.paperpilot-msg table {
+  max-width: 100%;
+  width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
 }
 
 .paperpilot-input-box {
   border-top: 1px solid var(--pp-border);
-  padding: 10px;
+  padding: var(--pp-pad) 0 0 0;
   background: var(--pp-bg);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--pp-gap);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .paperpilot-textarea {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   resize: none;
   border: 1px solid var(--pp-border);
   border-radius: 6px;
   padding: 8px;
-  font-size: 13px;
+  font-size: var(--pp-font-body);
   font-family: inherit;
   background: var(--pp-bg-secondary);
   color: var(--pp-text);
@@ -277,13 +441,27 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-width: 0;
+}
+
+.paperpilot-sidebar.paperpilot-narrow .paperpilot-toolbar-row {
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .paperpilot-domain-badge {
-  font-size: 11px;
+  font-size: var(--pp-font-sub);
   background: var(--pp-primary-light);
   color: var(--pp-primary);
   padding: 2px 6px;
   border-radius: 4px;
   font-weight: 500;
+}
+
+.paperpilot-settings input,
+.paperpilot-settings select,
+.paperpilot-settings textarea {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
 }

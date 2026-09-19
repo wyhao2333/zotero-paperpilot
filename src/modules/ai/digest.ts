@@ -1,6 +1,7 @@
 import { AIClient, AIRequestError } from "./client";
 import { PaperContextService } from "../reader/paper-context";
 import { PreferenceManager, DigestStrategyType } from "../../core/preferences";
+import { MATH_OUTPUT_RULES } from "./math-output-rules";
 
 export interface DigestOptions {
   title: string;
@@ -28,7 +29,7 @@ export class PaperDigestService {
 
 ### 📐 3. 关键公式与数学/物理模型 (Key Formulas & Models)
 - 提炼核心公式、目标函数或控制方程（若有），并简述物理/数学意义。
-- 数学公式规范：行内公式统一使用 $...$，独立块公式统一使用 $$ ... $$。禁止将数学公式放入普通代码块。
+${MATH_OUTPUT_RULES}
 
 ### 📊 4. 实验设计与数据支撑 (Experiments & Datasets)
 - 采用的核心数据集、实验基准评测或硬件/软件平台是什么？
@@ -167,7 +168,7 @@ export class PaperDigestService {
 - SECTION / TOPIC: 该片段涉及的章节或主题
 - MOTIVATION: 该部分针对的问题或背景
 - METHOD DETAILS: 涉及的方法、模型算法或实现细节
-- FORMULAS: 关键数学公式或推导 (使用 $...$ 或 $$ ... $$)
+- FORMULAS: 关键数学公式或推导 (严格遵循：行内 $...$，独立块 $$...$$，禁止裸写公式或放普通代码块)
 - EXPERIMENT / DATASET: 实验平台、数据集或评估方法
 - QUANTITATIVE RESULTS: 具体的量化指标、数据与实验结论
 - CONTRIBUTIONS: 该部分提出的创新点或主要发现
@@ -184,7 +185,7 @@ ${task.groupChunks.join("\n\n")}
           const partSummary = await AIClient.chat([
             {
               role: "system",
-              content: "你是一位专业学术审稿专家，请严格提取所给论文选段中的技术细节与事实，杜绝无根据臆造。",
+              content: `你是一位专业学术审稿专家，请严格提取所给论文选段中的技术细节与事实，杜绝无根据臆造。\n\n${MATH_OUTPUT_RULES}`,
             },
             { role: "user", content: partPrompt },
           ]);

@@ -9,6 +9,7 @@ import { AIClient } from "../ai/client";
 import { PaperDigestService } from "../ai/digest";
 import { PendingAction } from "./controller";
 import { PaperContextService } from "../reader/paper-context";
+import { MATH_OUTPUT_RULES } from "../ai/math-output-rules";
 
 const HTML_NS = "http://www.w3.org/1999/xhtml";
 
@@ -19,6 +20,9 @@ export class SidebarPanel {
   private currentTitle: string = "";
   private currentParentItemID: number = 0;
   private currentAttachmentID: number = 0;
+  private resizeObserver?: any;
+  private layoutMode: "normal" | "compact" | "narrow" = "normal";
+  private sidebarEl?: HTMLElement;
   private pdfHistory: PDFChatHistory = {
     schemaVersion: 2,
     storageKey: "",
@@ -161,14 +165,22 @@ export class SidebarPanel {
   <html:div class="paperpilot-header">
     <html:div class="paperpilot-title">
       <html:span>🚀</html:span>
-      <html:span id="pp-paper-title" style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+      <html:span id="pp-paper-title" class="paperpilot-paper-title">
         PaperPilot
       </html:span>
     </html:div>
-    <html:div style="display:flex; gap:4px;">
-      <html:button class="paperpilot-btn" id="pp-btn-digest" title="一键生成全文精读报告">📑 全文速读</html:button>
-      <html:button class="paperpilot-btn" id="pp-btn-export" title="导出对话至 Zotero 笔记">💾 笔记</html:button>
-      <html:button class="paperpilot-btn" id="pp-btn-clear" title="清空当前会话消息">🗑️</html:button>
+    <html:div class="paperpilot-header-actions">
+      <html:button class="paperpilot-btn" id="pp-btn-digest" title="一键生成全文精读报告" aria-label="一键生成全文精读报告">
+        <html:span class="btn-icon">📑</html:span>
+        <html:span class="btn-text"> 全文速读</html:span>
+      </html:button>
+      <html:button class="paperpilot-btn" id="pp-btn-export" title="导出对话至 Zotero 笔记" aria-label="导出对话至 Zotero 笔记">
+        <html:span class="btn-icon">💾</html:span>
+        <html:span class="btn-text"> 笔记</html:span>
+      </html:button>
+      <html:button class="paperpilot-btn" id="pp-btn-clear" title="清空当前会话消息" aria-label="清空当前会话消息">
+        <html:span class="btn-icon">🗑️</html:span>
+      </html:button>
     </html:div>
   </html:div>
 
@@ -181,18 +193,18 @@ export class SidebarPanel {
   <!-- Tab 1: Chat & Interpretation with Full-text Context -->
   <html:div class="paperpilot-tab-content" id="tab-content-chat" style="display:flex;">
     <!-- Row 1: Session Controls -->
-    <html:div style="display:flex; align-items:center; gap:4px; margin-bottom:4px;">
-      <html:span style="font-size:11px; color:var(--pp-text-muted); flex-shrink:0;">会话:</html:span>
-      <html:select id="pp-session-select" style="font-size:11px; flex:1; min-width:0; padding:2px 4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);"></html:select>
+    <html:div class="paperpilot-session-row">
+      <html:span class="paperpilot-label" style="font-size:11px; color:var(--pp-text-muted); flex-shrink:0;">会话:</html:span>
+      <html:select id="pp-session-select" style="font-size:11px; flex:1 1 180px; min-width:0; max-width:100%; padding:2px 4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);"></html:select>
       <html:button class="paperpilot-btn" id="pp-btn-new-session" title="新建对话" style="padding:1px 6px; font-size:11px; flex-shrink:0;">＋</html:button>
       <html:button class="paperpilot-btn" id="pp-btn-rename-session" title="重命名当前对话" style="padding:1px 6px; font-size:11px; flex-shrink:0;">✎</html:button>
       <html:button class="paperpilot-btn" id="pp-btn-delete-session" title="删除当前对话" style="padding:1px 6px; font-size:11px; flex-shrink:0;">🗑</html:button>
     </html:div>
 
     <!-- Row 2: Domain Selection -->
-    <html:div style="display:flex; align-items:center; gap:4px; margin-bottom:6px;">
-      <html:span style="font-size:11px; color:var(--pp-text-muted); flex-shrink:0;">领域:</html:span>
-      <html:select id="pp-domain-select" style="font-size:11px; flex:1; padding:2px 4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
+    <html:div class="paperpilot-domain-row">
+      <html:span class="paperpilot-label" style="font-size:11px; color:var(--pp-text-muted); flex-shrink:0;">领域:</html:span>
+      <html:select id="pp-domain-select" style="font-size:11px; flex:1 1 auto; min-width:0; max-width:100%; padding:2px 4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
         <html:option value="general">通用学术 (跨学科)</html:option>
         <html:option value="cs_ai">计算机与人工智能 (CS/AI)</html:option>
         <html:option value="med_bio">医学与生物生命科学 (Med/Bio)</html:option>
@@ -373,9 +385,66 @@ export class SidebarPanel {
     dump(`[PaperPilot Sidebar] input constructor=${input.constructor?.name}\n`);
     dump(`[PaperPilot Sidebar] send constructor=${send.constructor?.name}\n`);
 
+    this.sidebarEl = root;
+    this.sidebarEl.classList.add("paperpilot-normal");
+    this.initResizeObserver();
+
     const chatContainer = this.container.querySelector("#pp-chat-container") as HTMLElement;
     this.chatView = new ChatView(chatContainer);
     this.initSettingsUI();
+  }
+
+  private initResizeObserver(): void {
+    const doc = this.container.ownerDocument;
+    const win = doc?.defaultView;
+    const ResizeObserverCtor =
+      win?.ResizeObserver ||
+      (typeof ResizeObserver !== "undefined" ? ResizeObserver : null) ||
+      (globalThis as any).ResizeObserver;
+
+    if (ResizeObserverCtor) {
+      try {
+        this.resizeObserver = new ResizeObserverCtor((entries: any[]) => {
+          if (!entries || !entries.length) return;
+          const entry = entries[0];
+          const width = entry.contentRect
+            ? entry.contentRect.width
+            : (this.container as HTMLElement).clientWidth;
+          if (typeof width === "number" && width > 0) {
+            this.updateResponsiveLayout(width);
+          }
+        });
+        this.resizeObserver.observe(this.container);
+      } catch (e) {
+        dump(`[PaperPilot] ResizeObserver initialization failed: ${e}\n`);
+      }
+    }
+
+    const initialWidth = (this.container as HTMLElement).clientWidth;
+    if (initialWidth > 0) {
+      this.updateResponsiveLayout(initialWidth);
+    }
+  }
+
+  private updateResponsiveLayout(width: number): void {
+    let nextMode: "normal" | "compact" | "narrow" = "normal";
+    if (width < 360) {
+      nextMode = "narrow";
+    } else if (width < 520) {
+      nextMode = "compact";
+    } else {
+      nextMode = "normal";
+    }
+
+    if (nextMode === this.layoutMode && this.sidebarEl?.classList.contains(`paperpilot-${nextMode}`)) {
+      return;
+    }
+    this.layoutMode = nextMode;
+
+    if (this.sidebarEl) {
+      this.sidebarEl.classList.remove("paperpilot-normal", "paperpilot-compact", "paperpilot-narrow");
+      this.sidebarEl.classList.add(`paperpilot-${nextMode}`);
+    }
   }
 
   private onPrefChangeHandler: (() => void) | null = null;
@@ -497,6 +566,12 @@ export class SidebarPanel {
   }
 
   public destroy(): void {
+    if (this.resizeObserver) {
+      try {
+        this.resizeObserver.disconnect();
+      } catch (e) {}
+      this.resizeObserver = undefined;
+    }
     if (this.onPrefChangeHandler) {
       EventBus.off("preferences:changed", this.onPrefChangeHandler);
       this.onPrefChangeHandler = null;
@@ -718,7 +793,7 @@ export class SidebarPanel {
       }
     }
 
-    let systemPrompt = `你是一位专业高效的学术伴读助手 PaperPilot。\n针对用户的提问或论文选段，给出清晰、严谨、有学术洞见的解答。`;
+    let systemPrompt = `你是一位专业高效的学术伴读助手 PaperPilot。\n针对用户的提问或论文选段，给出清晰、严谨、有学术洞见的解答。\n\n${MATH_OUTPUT_RULES}`;
 
     if (relevantContext) {
       systemPrompt += `\n\n【论文相关原文段落参考】:\n${relevantContext}\n\n回答准则: 优先解答用户提问及所选引文，结合上述论文真实上下文进行分析推导。无法从论文支持的内容严禁臆造。`;

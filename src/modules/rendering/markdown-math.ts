@@ -145,7 +145,155 @@ export class MarkdownMathRenderer {
       return fullMatch;
     });
 
+    // E. Conservative bare-math fallback for un-delimited math expressions
+    text = this.normalizeBareMath(text);
+
     return text;
+  }
+
+  /**
+   * Identifies whether a standalone line represents a high-confidence mathematical equation.
+   */
+  static isHighConfidenceMathLine(line: string): boolean {
+    const trimmed = line.trim();
+    if (trimmed.length < 3) return false;
+    if (/[\u4e00-\u9fa5]/.test(trimmed)) return false;
+    if (/^#{1,6}\s|^[-*+]\s|^\d+\.\s|^>|^\|/.test(trimmed)) return false;
+    if (/\b(?:import|export|from|def|const|let|var|function|return|class|if|for|while|npm|console)\b/.test(trimmed)) return false;
+    if (/[a-zA-Z_]\w*\.[a-zA-Z_]\w*\(/.test(trimmed)) return false;
+    if (/[a-zA-Z]:\\/.test(trimmed)) return false;
+    if (/\b[a-zA-Z]{2,}_[a-zA-Z0-9]{2,}\b/.test(trimmed)) return false; // reject snake_case like api_key, file_name
+    if (!/(?:=|\approx|\sim|\le|\ge|≤|≥|\bin\b|∈|\bneq\b|≠)/.test(trimmed)) return false;
+
+    const hasSub = /\b[a-zA-Z]_(?:[a-zA-Z0-9]|\{[^}]+\})/.test(trimmed);
+    const hasSup = /\b[a-zA-Z]\^(?:[a-zA-Z0-9]|\{[^}]+\})/.test(trimmed);
+    const hasMathFunc = /\b(?:[EP]|Var|Cov)\s*\[/.test(trimmed) || /\\mathbb\{[A-Z]\}/.test(trimmed);
+    const hasMathSym = /[∈≤≥≈≠±×ΣΠ∂∇]/.test(trimmed);
+
+    if (!hasSub && !hasSup && !hasMathFunc && !hasMathSym) return false;
+
+    const allowedWords = new Set(["sin","cos","tan","log","exp","det","dim","ker","max","min","sup","inf","lim","argmin","argmax","diag","rank","trace","sign","diff"]);
+    const words = trimmed.match(/[a-zA-Z]{4,}/g) || [];
+    for (const w of words) {
+      if (!allowedWords.has(w.toLowerCase())) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Identifies whether an inline fragment represents high-confidence mathematical notation.
+   */
+  static isHighConfidenceInlineMath(text: string): boolean {
+    const trimmed = text.trim();
+    if (trimmed.length < 3) return false;
+    if (/[\u4e00-\u9fa5]/.test(trimmed)) return false;
+    if (/\b(?:import|export|from|def|const|let|var|function|return|class|if|for|while|npm|console)\b/.test(trimmed)) return false;
+    if (/[a-zA-Z_]\w*\.[a-zA-Z_]\w*\(/.test(trimmed)) return false;
+    if (/[a-zA-Z]:\\/.test(trimmed)) return false;
+    if (/\b[a-zA-Z]{2,}_[a-zA-Z0-9]{2,}\b/.test(trimmed)) return false;
+
+    const hasSub = /\b[a-zA-Z]_(?:[a-zA-Z0-9]|\{[^}]+\})/.test(trimmed);
+    const hasSup = /\b[a-zA-Z]\^(?:[a-zA-Z0-9]|\{[^}]+\})/.test(trimmed);
+    const hasMathFunc = /\b(?:[EP]|Var|Cov)\s*\[/.test(trimmed) || /\\mathbb\{[A-Z]\}/.test(trimmed);
+    const hasMathSym = /[∈≤≥≈≠±×ΣΠ∂∇]/.test(trimmed);
+
+    return hasSub || hasSup || hasMathFunc || hasMathSym;
+  }
+
+  /**
+   * Normalizes bare math expressions within a single line (bullet definitions and embedded equations).
+   */
+  static normalizeBareMathInLine(line: string): string {
+    let result = line;
+
+    // Pattern 1: Bullet list definition: - x_k ∈ R^n: ...
+    const bulletDefRegex = /^(\s*(?:[-*+]|\d+\.)\s*)([a-zA-Z]_(?:[a-zA-Z0-9]|\{[^}]+\})\s*(?:∈|\\in|\bin\b|≤|≥|<=|>=|<|>|=|≈|~)\s*[a-zA-Z0-9](?:\^[a-zA-Z0-9]+|\{[^}]+\})?)\s*([:：])/;
+    result = result.replace(bulletDefRegex, (_, prefix, mathExpr, colon) => {
+      return `${prefix}$${mathExpr.trim()}$${colon}`;
+    });
+
+    // Pattern 2: Embedded equations like Q_k = E[w_k w_k^T] or R_k = E[v_k v_k^T]
+    const embeddedEqRegex = /(?<=^|[\s，。；、(（:：\u4e00-\u9fa5])([a-zA-Z]_(?:[a-zA-Z0-9]|\{[^}]+\})\s*=\s*(?:(?:E|\\mathbb\{E\})\s*\[[^\n\]]+\]|[a-zA-Z0-9]_(?:[a-zA-Z0-9]|\{[^}]+\})|\b[a-zA-Z0-9_\^{}\[\]()=+\-*/\\.,|<>:;∈≤≥≈≠\s]+?))(?=$|[\s，。；、)）:：\u4e00-\u9fa5])/g;
+    result = result.replace(embeddedEqRegex, (m, eq) => {
+      const trimmed = eq.trim();
+      if (this.isHighConfidenceInlineMath(trimmed) && trimmed.includes("=")) {
+        return `$${trimmed}$`;
+      }
+      return m;
+    });
+
+    // Pattern 3: Standalone inline math terms like '其中 x_k ∈ R^n 为状态'
+    const standaloneTermRegex = /(?<=^|[\s，。；、(（:：\u4e00-\u9fa5])([a-zA-Z]_(?:[a-zA-Z0-9]|\{[^}]+\})\s*(?:∈|\\in|\bin\b)\s*[a-zA-Z0-9](?:\^[a-zA-Z0-9]+|\{[^}]+\})?)(?=$|[\s，。；、)）:：\u4e00-\u9fa5])/g;
+    result = result.replace(standaloneTermRegex, (_, term) => {
+      return `$${term.trim()}$`;
+    });
+
+    return result;
+  }
+
+  /**
+   * Conservatively protects code blocks and explicit math before normalizing bare math line-by-line.
+   */
+  static normalizeBareMath(text: string): string {
+    if (!text) return "";
+
+    // 1. Mask code blocks and existing explicit math
+    const protectedChunks: string[] = [];
+    let masked = text;
+
+    masked = masked.replace(/```[\s\S]*?```/g, (match) => {
+      const placeholder = `PAPERPILOTPROTECTEDCHUNK${protectedChunks.length}END`;
+      protectedChunks.push(match);
+      return placeholder;
+    });
+
+    masked = masked.replace(/`[^`\n]+`/g, (match) => {
+      const placeholder = `PAPERPILOTPROTECTEDCHUNK${protectedChunks.length}END`;
+      protectedChunks.push(match);
+      return placeholder;
+    });
+
+    masked = masked.replace(/\$\$[\s\S]*?\$\$/g, (match) => {
+      const placeholder = `PAPERPILOTPROTECTEDCHUNK${protectedChunks.length}END`;
+      protectedChunks.push(match);
+      return placeholder;
+    });
+
+    masked = masked.replace(/\\\[[\s\S]*?\\\]/g, (match) => {
+      const placeholder = `PAPERPILOTPROTECTEDCHUNK${protectedChunks.length}END`;
+      protectedChunks.push(match);
+      return placeholder;
+    });
+
+    masked = masked.replace(/\\\([\s\S]*?\\\)/g, (match) => {
+      const placeholder = `PAPERPILOTPROTECTEDCHUNK${protectedChunks.length}END`;
+      protectedChunks.push(match);
+      return placeholder;
+    });
+
+    masked = masked.replace(/(?<!\\)\$((?:[^\$\n\\]|\\.)+)\$/g, (match) => {
+      const placeholder = `PAPERPILOTPROTECTEDCHUNK${protectedChunks.length}END`;
+      protectedChunks.push(match);
+      return placeholder;
+    });
+
+    // 2. Process lines
+    const lines = masked.split(/\r?\n/);
+    const processedLines = lines.map((line) => {
+      if (this.isHighConfidenceMathLine(line)) {
+        return `$$\n${line.trim()}\n$$`;
+      }
+      return this.normalizeBareMathInLine(line);
+    });
+
+    let result = processedLines.join("\n");
+
+    // 3. Restore protected chunks
+    for (let i = 0; i < protectedChunks.length; i++) {
+      result = result.replace(`PAPERPILOTPROTECTEDCHUNK${i}END`, () => protectedChunks[i]);
+    }
+
+    return result;
   }
 
   /**

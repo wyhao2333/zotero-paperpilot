@@ -88,6 +88,7 @@
           if (raw) {
             const parsed = JSON.parse(raw);
             return {
+              ...parsed,
               translationService: parsed.translationService || "mymemory",
               targetLanguage: parsed.targetLanguage || "zh-CN",
               autoTranslateSelection: !!parsed.autoTranslateSelection,
@@ -97,6 +98,10 @@
                 ...(parsed.aiProviders || {}),
               },
               defaultDomain: parsed.defaultDomain || "general",
+              digestStrategy: parsed.digestStrategy || "auto",
+              digestConcurrency: typeof parsed.digestConcurrency === "number" ? parsed.digestConcurrency : 4,
+              digestSinglePassMaxChars: typeof parsed.digestSinglePassMaxChars === "number" ? parsed.digestSinglePassMaxChars : 48000,
+              aiTranslationUseContext: parsed.aiTranslationUseContext !== false,
               customPromptTemplate:
                 parsed.customPromptTemplate ||
                 "请结合上下文对以下内容进行深度学术解读，并解析关键术语：\n\n{text}",
@@ -115,6 +120,10 @@
         selectedAIProvider: "zhipu",
         aiProviders: { ...defaultProviders },
         defaultDomain: "general",
+        digestStrategy: "auto",
+        digestConcurrency: 4,
+        digestSinglePassMaxChars: 48000,
+        aiTranslationUseContext: true,
         customPromptTemplate:
           "请结合上下文对以下内容进行深度学术解读，并解析关键术语：\n\n{text}",
         interpretationPromptOverrides: {},
@@ -170,6 +179,10 @@
       const baseUrlInput = doc.getElementById("pp-pref-base-url");
       const modelInput = doc.getElementById("pp-pref-model");
       const domainSelect = doc.getElementById("pp-pref-default-domain");
+      const digestStrategySelect = doc.getElementById("pp-pref-digest-strategy");
+      const digestConcurrencyInput = doc.getElementById("pp-pref-digest-concurrency");
+      const digestMaxCharsInput = doc.getElementById("pp-pref-digest-max-chars");
+      const aiTransContextCb = doc.getElementById("pp-pref-ai-trans-context");
       const customPromptArea = doc.getElementById("pp-pref-custom-prompt");
       const promptWarningLabel = doc.getElementById("pp-pref-prompt-warning");
       const resetDomainPromptBtn = doc.getElementById("pp-pref-btn-reset-domain-prompt");
@@ -182,6 +195,10 @@
       if (autoTransCb) autoTransCb.checked = prefs.autoTranslateSelection;
       if (providerSelect) providerSelect.value = prefs.selectedAIProvider;
       if (domainSelect) domainSelect.value = prefs.defaultDomain;
+      if (digestStrategySelect) digestStrategySelect.value = prefs.digestStrategy || "auto";
+      if (digestConcurrencyInput) digestConcurrencyInput.value = String(prefs.digestConcurrency || 4);
+      if (digestMaxCharsInput) digestMaxCharsInput.value = String(prefs.digestSinglePassMaxChars || 48000);
+      if (aiTransContextCb) aiTransContextCb.checked = prefs.aiTranslationUseContext !== false;
 
       const domainPromptDrafts = {};
 
@@ -369,6 +386,10 @@
         if (targetLangSelect) prefs.targetLanguage = targetLangSelect.value;
         if (autoTransCb) prefs.autoTranslateSelection = autoTransCb.checked;
         if (domainSelect) prefs.defaultDomain = domainSelect.value;
+        if (digestStrategySelect) prefs.digestStrategy = digestStrategySelect.value;
+        if (digestConcurrencyInput) prefs.digestConcurrency = parseInt(digestConcurrencyInput.value, 10) || 4;
+        if (digestMaxCharsInput) prefs.digestSinglePassMaxChars = parseInt(digestMaxCharsInput.value, 10) || 48000;
+        if (aiTransContextCb) prefs.aiTranslationUseContext = aiTransContextCb.checked;
 
         // Persist overrides from drafts
         if (!prefs.interpretationPromptOverrides) {

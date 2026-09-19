@@ -126,7 +126,7 @@ async function runStaticValidation() {
   console.log("\n[Check 9] Verifying AIClient protects against duplicate non-streaming fallback after partial stream...");
   assert(clientTs.includes("let receivedAnyDelta = false;"), "AIClient must track receivedAnyDelta");
   assert(clientTs.includes("if (receivedAnyDelta)"), "AIClient must guard catch block with receivedAnyDelta");
-  assert(clientTs.includes("throw new Error"), "AIClient must throw instead of calling callNonStreaming() when deltas arrived");
+  assert(clientTs.includes("throw new AIRequestError") || clientTs.includes("throw new Error"), "AIClient must throw instead of calling callNonStreaming() when deltas arrived");
   console.log("✅ Check 9 PASS: AIClient prevents duplicate request on partial stream interruption.");
 
   // Check 10: ChatView does not directly use global document.createElement
@@ -232,14 +232,60 @@ async function runStaticValidation() {
   assert(floatingBarTs.includes('setAttribute("data-active"'), "floating-bar.ts must update data-active attribute");
   console.log("✅ Check 17 PASS: Selection button state machine verified.");
 
-  // Check 18: LaTeX Math & KaTeX MathML Rendering
-  console.log("\n[Check 18] Verifying LaTeX Math & KaTeX MathML Rendering...");
-  assert(chatViewTs.includes("renderMarkdownContent"), "chat-view.ts must implement renderMarkdownContent");
-  assert(chatViewTs.includes("katex.renderToString"), "chat-view.ts must call katex.renderToString");
-  assert(chatViewTs.includes('output: "mathml"'), "chat-view.ts must configure KaTeX output as mathml");
-  assert(chatViewTs.includes("paperpilot-math-block"), "chat-view.ts must style block math");
-  assert(chatViewTs.includes("paperpilot-math-inline"), "chat-view.ts must style inline math");
-  console.log("✅ Check 18 PASS: KaTeX math delimiters and MathML rendering verified.");
+  // Check 18: Markdown & LaTeX Math Rendering (Sidebar MathML + Zotero Note Native Math)
+  console.log("\n[Check 18] Verifying Markdown & LaTeX Math Rendering...");
+  const markdownMathTs = fs.readFileSync("src/modules/rendering/markdown-math.ts", "utf-8");
+  const noteExporterTs = fs.readFileSync("src/modules/sidebar/note-exporter.ts", "utf-8");
+  assert(chatViewTs.includes("MarkdownMathRenderer.renderForSidebar"), "chat-view.ts must use MarkdownMathRenderer for sidebar");
+  assert(markdownMathTs.includes("katex.renderToString"), "markdown-math.ts must call katex.renderToString");
+  assert(markdownMathTs.includes('output: "mathml"'), "markdown-math.ts must configure KaTeX output as mathml");
+  assert(markdownMathTs.includes("paperpilot-math-block"), "markdown-math.ts must style block math");
+  assert(markdownMathTs.includes("paperpilot-math-inline"), "markdown-math.ts must style inline math");
+  assert(markdownMathTs.includes("looksLikeMath"), "markdown-math.ts must implement looksLikeMath heuristic");
+  assert(markdownMathTs.includes("normalizeModelMarkdown"), "markdown-math.ts must strip outer fences and fix delimiters");
+  assert(markdownMathTs.includes("renderForZoteroNote"), "markdown-math.ts must implement renderForZoteroNote");
+  assert(markdownMathTs.includes('span class="math"'), "renderForZoteroNote must output span class=math for inline math");
+  assert(markdownMathTs.includes('pre class="math"'), "renderForZoteroNote must output pre class=math for block math");
+  assert(noteExporterTs.includes("MarkdownMathRenderer.renderForZoteroNote"), "note-exporter.ts must use MarkdownMathRenderer.renderForZoteroNote");
+  console.log("✅ Check 18 PASS: Markdown-it + KaTeX MathML and Zotero Note native math verified.");
+
+  // Check 19: Adaptive Digest, Single Pass vs Map-Reduce, and Resilient Fallback
+  console.log("\n[Check 19] Verifying Adaptive Digest Strategy & Fallback...");
+  assert(digestTs.includes("digestStrategy"), "digest.ts must support digestStrategy");
+  assert(digestTs.includes("digestSinglePassMaxChars"), "digest.ts must support digestSinglePassMaxChars");
+  assert(digestTs.includes('"single-pass"'), "digest.ts must implement single-pass digest");
+  assert(digestTs.includes('"map-reduce"'), "digest.ts must implement map-reduce digest");
+  assert(digestTs.includes("NOT PRESENT"), "Map-Reduce extraction prompt must instruct NOT PRESENT for missing sections");
+  assert(digestTs.includes("failedCount / tasks.length > 0.2"), "digest.ts must fail if >20% chunks fail");
+  assert(digestTs.includes("slice(0, 5500)"), "digest.ts must fall back to raw excerpt (5500 chars) on transient chunk failures");
+  assert(digestTs.includes("[PaperPilot Digest] total="), "digest.ts must log elapsed duration without leaking secrets");
+  console.log("✅ Check 19 PASS: Adaptive digest (single-pass, map-reduce, fallback, duration logs) verified.");
+
+  // Check 20: Translation Context Forwarding & Exact Index Map
+  console.log("\n[Check 20] Verifying Translation Context Forwarding & Exact Index Mapping...");
+  const transManagerTs = fs.readFileSync("src/modules/translator/index.ts", "utf-8");
+  const aiTransTs = fs.readFileSync("src/modules/translator/ai-translator.ts", "utf-8");
+  assert(transManagerTs.includes("context: options?.context"), "TranslatorManager must forward options.context");
+  assert(transManagerTs.includes("attachmentID: options?.attachmentID"), "TranslatorManager must forward options.attachmentID");
+  assert(aiTransTs.includes("BACKGROUND CONTEXT") && aiTransTs.includes("DO NOT translate"), "AITranslator must explicitly isolate background context in prompt");
+  assert(paperCtxTs.includes("normalizeWithIndexMap"), "paper-context.ts must implement normalizeWithIndexMap");
+  assert(paperCtxTs.includes("indexMap["), "paper-context.ts must map normalized indices back to original character positions");
+  console.log("✅ Check 20 PASS: Translation context forwarding, background isolation, and exact index mapping verified.");
+
+  // Check 21: Multi-Session Management, Settings Sync & Stale Overwrite Prevention
+  console.log("\n[Check 21] Verifying Multi-Session Management & Settings Sync...");
+  assert(storageTs.includes("renameSession"), "storage.ts must implement renameSession");
+  assert(storageTs.includes("deleteSession"), "storage.ts must implement deleteSession");
+  assert(panelTs.includes("syncSettingsUIFromPreferences"), "panel.ts must implement syncSettingsUIFromPreferences");
+  assert(panelTs.includes("preferences:changed"), "panel.ts must listen for preferences:changed");
+  assert(panelTs.includes("destroy(): void"), "panel.ts must implement destroy() to unbind preferences:changed");
+  assert(prefsTs.includes("registerObserver"), "preferences.ts must register Zotero preference observer");
+  assert(prefsTs.includes("unregisterObserver"), "preferences.ts must unregister Zotero preference observer");
+  assert(prefsJs.includes("digestStrategy: parsed.digestStrategy"), "preferences.js must preserve digestStrategy");
+  assert(prefsJs.includes("digestConcurrency: typeof parsed.digestConcurrency"), "preferences.js must preserve digestConcurrency");
+  assert(prefsJs.includes("digestSinglePassMaxChars: typeof parsed.digestSinglePassMaxChars"), "preferences.js must preserve digestSinglePassMaxChars");
+  assert(prefsJs.includes("aiTranslationUseContext: parsed.aiTranslationUseContext"), "preferences.js must preserve aiTranslationUseContext");
+  console.log("✅ Check 21 PASS: Multi-session management, settings sync, and preference preservation verified.");
 
   console.log("\n==================================================");
   console.log("STATIC CHECK PASS (Requires manual Zotero GUI verification)");

@@ -6,6 +6,24 @@ export interface ChatMessagePayload {
   content: string;
 }
 
+export class AIRequestError extends Error {
+  status?: number;
+  retryable: boolean;
+
+  constructor(message: string, status?: number, retryable?: boolean) {
+    super(message);
+    this.name = "AIRequestError";
+    this.status = status;
+    if (typeof retryable === "boolean") {
+      this.retryable = retryable;
+    } else if (typeof status === "number") {
+      this.retryable = [429, 502, 503, 504].includes(status);
+    } else {
+      this.retryable = true;
+    }
+  }
+}
+
 export class AIClient {
   static async chat(
     messages: ChatMessagePayload[],
@@ -19,7 +37,7 @@ export class AIClient {
     const isOllama = config?.id === "ollama";
 
     if (!config || (!config.apiKey && !isOllama)) {
-      throw new Error(`[PaperPilot] 未配置 ${config?.name || "AI"} 的 API Key，请在插件设置中填写。`);
+      throw new AIRequestError(`[PaperPilot] 未配置 ${config?.name || "AI"} 的 API Key，请在插件设置中填写。`, 401, false);
     }
 
     // Sanitize base URL (ensure no trailing slash)
@@ -44,12 +62,17 @@ export class AIClient {
       });
 
       if (typeof Zotero !== "undefined" && Zotero.HTTP?.request) {
-        const xhr = await Zotero.HTTP.request("POST", endpoint, {
-          headers,
-          body,
-          responseType: "json",
-          timeout: 60000,
-        });
+        let xhr: any;
+        try {
+          xhr = await Zotero.HTTP.request("POST", endpoint, {
+            headers,
+            body,
+            responseType: "json",
+            timeout: 60000,
+          });
+        } catch (netErr: any) {
+          throw new AIRequestError(`[${config.name}] 网络请求异常: ${netErr?.message || netErr}`, undefined, true);
+        }
 
         if (xhr && xhr.status >= 200 && xhr.status < 300) {
           const json = xhr.response || (xhr.responseText ? JSON.parse(xhr.responseText) : null);
@@ -59,8 +82,9 @@ export class AIClient {
           }
           return content;
         } else {
-          const status = xhr?.status || "unknown";
-          let errorMsg = `HTTP ${status}`;
+          const statusNum = typeof xhr?.status === "number" ? xhr.status : parseInt(xhr?.status, 10);
+          const validStatus = isNaN(statusNum) ? undefined : statusNum;
+          let errorMsg = `HTTP ${validStatus || "unknown"}`;
           try {
             const errJson = xhr?.response || (xhr?.responseText ? JSON.parse(xhr.responseText) : null);
             if (errJson?.error?.message) {
@@ -69,17 +93,23 @@ export class AIClient {
               errorMsg = xhr.responseText.slice(0, 200);
             }
           } catch (e) {}
-          throw new Error(`[${config.name}] API 请求失败 (${errorMsg})`);
+          throw new AIRequestError(`[${config.name}] API 请求失败 (${errorMsg})`, validStatus);
         }
       } else {
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers,
-          body,
-        });
+        let response: Response;
+        try {
+          response = await fetch(endpoint, {
+            method: "POST",
+            headers,
+            body,
+          });
+        } catch (netErr: any) {
+          throw new AIRequestError(`[${config.name}] 网络请求异常: ${netErr?.message || netErr}`, undefined, true);
+        }
+
         if (!response.ok) {
           const errText = await response.text().catch(() => "");
-          throw new Error(`[${config.name}] API 请求失败 (HTTP ${response.status}): ${errText.slice(0, 200)}`);
+          throw new AIRequestError(`[${config.name}] API 请求失败 (HTTP ${response.status}): ${errText.slice(0, 200)}`, response.status);
         }
         const json = await response.json();
         const content = json?.choices?.[0]?.message?.content || "";
@@ -121,7 +151,7 @@ export class AIClient {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
-        throw new Error(`[${config.name}] API 请求失败 (HTTP ${response.status}): ${errorText.slice(0, 200)}`);
+        throw new AIRequestError(`[${config.name}] API 请求失败 (HTTP ${response.status}): ${errorText.slice(0, 200)}`, response.status);
       }
 
       if (!response.body || typeof (response.body as any).getReader !== "function") {
@@ -177,7 +207,7 @@ export class AIClient {
     } catch (streamErr: any) {
       if (receivedAnyDelta) {
         dump(`[PaperPilot AI] Streaming interrupted after receiving ${totalChars} chars: ${streamErr.message || streamErr}\n`);
-        throw new Error(`Streaming interrupted after receiving partial response: ${streamErr.message || streamErr}`);
+        throw new AIRequestError(`Streaming interrupted after receiving partial response: ${streamErr.message || streamErr}`, streamErr?.status, true);
       }
       dump(`[PaperPilot] Streaming failed before tokens: ${streamErr.message || streamErr}. Downgrading to non-streaming...\n`);
       return await callNonStreaming();

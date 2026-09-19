@@ -21,6 +21,7 @@ export class PaperPilotPlugin {
     this.rootURI = data?.rootURI || data?.resourceURI?.spec || "";
 
     PreferenceManager.init();
+    PreferenceManager.registerObserver();
 
     // Ensure Fluent localization and stylesheets are inserted in main windows
     try {
@@ -51,6 +52,7 @@ export class PaperPilotPlugin {
 
   destroy(data?: any): void {
     dump("[PaperPilot] Destroying PaperPilot...\n");
+    PreferenceManager.unregisterObserver();
     EventBus.clear();
     FloatingBarManager.hide();
 
@@ -232,6 +234,9 @@ export class PaperPilotPlugin {
             const mount = body?.querySelector?.("#paperpilot-sidebar-mount");
             const panel = (mount as any)?._paperPilotPanel || (body as any)?._paperPilotPanel;
             if (panel) {
+              if (typeof panel.destroy === "function") {
+                panel.destroy();
+              }
               PaperPilotSidebarController.detachPanel(panel, tabID);
             }
             if (mount) delete (mount as any)._paperPilotPanel;

@@ -13,16 +13,19 @@ export class AITranslator implements ITranslatorService {
     const targetLang = options.to || PreferenceManager.get().targetLanguage || "zh-CN";
 
     const systemPrompt = `You are an expert academic translator specializing in scientific literature.
-Translate the user's text into ${targetLang}.
+Translate the user's target text into ${targetLang}.
 Guidelines:
 1. Ensure strict academic precision, natural fluency, and field-appropriate terminology.
-2. Maintain any mathematical formulas (e.g., LaTeX), chemical equations, or citation markers verbatim.
-3. Output ONLY the translated text without commentary, pleasantries, or explanations.`;
+2. If background context is provided, it is solely for terminology disambiguation and pronoun resolution. NEVER translate the background context.
+3. Translate ONLY the designated TARGET text chunk.
+4. Maintain any mathematical formulas (e.g., LaTeX), chemical equations, or citation markers verbatim.
+5. Output ONLY the translated target text without commentary, pleasantries, or explanations.`;
 
     let userContent = trimmed;
     const useContext = PreferenceManager.get().aiTranslationUseContext !== false;
     if (useContext && options.context && options.context.trim()) {
-      userContent = `【参考上下文 (仅用于辅助理解专有名词、缩写与代词指代，无需翻译参考上下文)】:\n"""\n${options.context.trim()}\n"""\n\n【需要翻译的目标学术选段】:\n"""\n${trimmed}\n"""`;
+      const cleanContext = options.context.trim().slice(0, 1200);
+      userContent = `【BACKGROUND CONTEXT (Reference only for term disambiguation, DO NOT translate)】:\n"""\n${cleanContext}\n"""\n\n【TARGET TEXT TO TRANSLATE】:\n"""\n${trimmed}\n"""`;
     }
 
     return await AIClient.chat([

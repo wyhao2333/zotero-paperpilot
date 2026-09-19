@@ -7,7 +7,7 @@
     "compile": "node esbuild.js",
     "build": "node esbuild.js --package",
     "package": "node esbuild.js --package",
-    "test": "node test/test-services.js"
+    "test": "node test/verify-architecture.js && node test/test-math-rendering.js && node test/test-concurrency-digest.js && node test/test-context-strategy.js && node test/test-pdf-history-isolation.js && node test/test-selection-button-state.js"
   },
   "keywords": [
     "zotero",
@@ -25,12 +25,14 @@
   "license": "MIT",
   "devDependencies": {
     "@types/katex": "^0.16.8",
+    "@types/markdown-it": "^14.2.0",
     "esbuild": "^0.25.0",
     "jszip": "^3.10.1",
     "typescript": "^5.8.2"
   },
   "dependencies": {
     "katex": "^0.18.7",
+    "markdown-it": "^15.0.2",
     "zotero-plugin-toolkit": "^5.2.0"
   }
 }

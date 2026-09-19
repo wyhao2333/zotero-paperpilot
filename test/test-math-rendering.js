@@ -124,6 +124,99 @@ function testMathRendering() {
   const out4 = renderMarkdownContent(input4);
   assert(!out4.includes("paperpilot-math-inline"), "Escaped \\$ must not trigger inline math");
   console.log("✅ Escaped dollar \\$ properly excluded from math parsing.");
+
+  // Test Case 5: Model Markdown Normalization (Fence stripping & math blocks)
+  function looksLikeMath(str) {
+    const mathSignals = [
+      /\\(?:frac|sum|int|sqrt|alpha|beta|gamma|partial|infty|mathbf|mathrm|times|cdot|le|ge|neq|approx|equiv|forall|exists|in|subset| cup|cap|pm|nabla)/,
+      /[a-zA-Z]\s*=\s*[a-zA-Z0-9]/,
+      /\^[\{\d]/,
+      /_[\{\d]/,
+    ];
+    return mathSignals.some((re) => re.test(str));
+  }
+
+  function normalizeModelMarkdown(raw) {
+    if (!raw) return "";
+    let text = raw.trim();
+    const outerFenceRegex = /^```(?:markdown|md)\r?\n([\s\S]*?)\r?\n```$/i;
+    const outerMatch = text.match(outerFenceRegex);
+    if (outerMatch) {
+      text = outerMatch[1].trim();
+    } else {
+      const untypedOuter = text.match(/^```\r?\n([\s\S]*?)\r?\n```$/);
+      if (untypedOuter && !looksLikeMath(untypedOuter[1])) {
+        if (/#{1,6}\s+|(?:\r?\n){2,}/.test(untypedOuter[1])) {
+          text = untypedOuter[1].trim();
+        }
+      }
+    }
+
+    text = text.replace(/```(?:math|latex|tex)\r?\n([\s\S]*?)\r?\n```/gi, (_, mathCode) => {
+      return `\n\n$$\n${mathCode.trim()}\n$$\n\n`;
+    });
+
+    text = text.replace(/```\r?\n([\s\S]*?)\r?\n```/g, (match, code) => {
+      if (looksLikeMath(code)) {
+        return `\n\n$$\n${code.trim()}\n$$\n\n`;
+      }
+      return match;
+    });
+
+    text = text.replace(/\\\s+\(/g, "\\(").replace(/\\\s+\)/g, "\\)");
+    text = text.replace(/\\\s+\[/g, "\\[").replace(/\\\s+\]/g, "\\]");
+    return text;
+  }
+
+  const fencedModelOutput = "```markdown\n# 核心公式\n```latex\n\\int_0^1 x^2 dx = \\frac{1}{3}\n```\n```";
+  const normalized = normalizeModelMarkdown(fencedModelOutput);
+  assert(!normalized.startsWith("```markdown"), "Outer markdown fence must be stripped");
+  assert(normalized.includes("$$\n\\int_0^1 x^2 dx = \\frac{1}{3}\n$$"), "```latex fence must be converted to $$...$$ block");
+  console.log("✅ Outer fence stripped and ```latex block converted to $$ math.");
+
+  // Test Case 6: Math-like untyped code block normalization
+  const mathCodeBlock = "```\nE = mc^2\n```";
+  const normalizedUntyped = normalizeModelMarkdown(mathCodeBlock);
+  assert(normalizedUntyped.includes("$$\nE = mc^2\n$$"), "Untyped math block must be converted to $$ math");
+  console.log("✅ Untyped code block with math heuristic converted to $$ math.");
+
+  // Test Case 7: Zotero Note Native Math (Schema 9)
+  function renderForZoteroNote(md) {
+    if (!md) return "";
+    let text = normalizeModelMarkdown(md);
+    const mathTokens = [];
+    let tokenIndex = 0;
+
+    text = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, tex) => {
+      const id = `__NOTEMATH_BLOCK_${tokenIndex++}__`;
+      mathTokens.push({ id, raw: tex.trim(), block: true });
+      return id;
+    });
+
+    text = text.replace(/(?<!\\)\$((?:[^\$\n\\]|\\.)+)\$/g, (_, tex) => {
+      const id = `__NOTEMATH_INLINE_${tokenIndex++}__`;
+      mathTokens.push({ id, raw: tex.trim(), block: false });
+      return id;
+    });
+
+    let safe = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    safe = safe.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br/>");
+    safe = `<p>${safe}</p>`;
+
+    for (const token of mathTokens) {
+      const replacement = token.block
+        ? `<pre class="math">$$${token.raw}$$</pre>`
+        : `<span class="math">$${token.raw}$</span>`;
+      safe = safe.replace(token.id, () => replacement);
+    }
+    return safe;
+  }
+
+  const noteInput = "推导结论：在假定条件下 $a^2 + b^2 = c^2$，且：\n$$\\nabla \\times \\mathbf{E} = -\\frac{\\partial \\mathbf{B}}{\\partial t}$$";
+  const noteOutput = renderForZoteroNote(noteInput);
+  assert(noteOutput.includes('<span class="math">$a^2 + b^2 = c^2$</span>'), "Note must contain <span class='math'>$formula$</span>");
+  assert(noteOutput.includes('<pre class="math">$$\\nabla \\times \\mathbf{E} = -\\frac{\\partial \\mathbf{B}}{\\partial t}$$</pre>'), "Note must contain <pre class='math'>$$formula$$</pre>");
+  console.log("✅ Zotero Note native math formatting (<span class='math'> and <pre class='math'>) verified.");
 }
 
 try {

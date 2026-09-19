@@ -147,6 +147,8 @@ export class TranslatorManager {
           const chunkResult = await service.translate(chunks[i], {
             from: options?.from,
             to,
+            context: options?.context,
+            attachmentID: options?.attachmentID,
           });
 
           if (!chunkResult || !chunkResult.trim()) {

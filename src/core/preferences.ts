@@ -1,6 +1,8 @@
 import { AIProviderConfig, DomainType } from "../types/zotero";
+import { EventBus } from "./event-bus";
 
 export type TranslationServiceType = "mymemory" | "google" | "bing" | "youdao" | "ai";
+export type DigestStrategyType = "auto" | "single-pass" | "map-reduce";
 
 export interface PluginPreferences {
   translationService: TranslationServiceType;
@@ -11,8 +13,10 @@ export interface PluginPreferences {
   defaultDomain: DomainType;
   customPromptTemplate: string;
   interpretationPromptOverrides?: Partial<Record<DomainType, string>>;
-  digestConcurrency?: number;
-  aiTranslationUseContext?: boolean;
+  digestStrategy: DigestStrategyType;
+  digestConcurrency: number;
+  digestSinglePassMaxChars: number;
+  aiTranslationUseContext: boolean;
 }
 
 export const DEFAULT_AI_PROVIDERS: Record<string, AIProviderConfig> = {
@@ -92,13 +96,16 @@ export const DEFAULT_PREFS: PluginPreferences = {
   defaultDomain: "general",
   customPromptTemplate: "请结合上下文对以下内容进行深度学术解读，并解析关键术语：\n\n{text}",
   interpretationPromptOverrides: {},
-  digestConcurrency: 3,
+  digestStrategy: "auto",
+  digestConcurrency: 4,
+  digestSinglePassMaxChars: 48000,
   aiTranslationUseContext: true,
 };
 
 export class PreferenceManager {
   private static readonly PREF_KEY = "extensions.paperpilot.settings";
   private static cachedPrefs: PluginPreferences = { ...DEFAULT_PREFS };
+  private static observerSymbol: string | null = null;
 
   static init(): void {
     try {
@@ -126,6 +133,37 @@ export class PreferenceManager {
     }
   }
 
+  static registerObserver(): void {
+    if (this.observerSymbol) return;
+    try {
+      if (typeof Zotero !== "undefined" && Zotero.Prefs?.registerObserver) {
+        this.observerSymbol = Zotero.Prefs.registerObserver(
+          this.PREF_KEY,
+          () => {
+            dump("[PaperPilot] Prefs observer triggered -> reinitializing prefs\n");
+            this.init();
+            EventBus.emit("preferences:changed");
+          },
+          true
+        );
+      }
+    } catch (e) {
+      dump(`[PaperPilot] Failed to register prefs observer: ${e}\n`);
+    }
+  }
+
+  static unregisterObserver(): void {
+    if (!this.observerSymbol) return;
+    try {
+      if (typeof Zotero !== "undefined" && Zotero.Prefs?.unregisterObserver) {
+        Zotero.Prefs.unregisterObserver(this.observerSymbol);
+        this.observerSymbol = null;
+      }
+    } catch (e) {
+      dump(`[PaperPilot] Failed to unregister prefs observer: ${e}\n`);
+    }
+  }
+
   static get(): PluginPreferences {
     return this.cachedPrefs;
   }
@@ -143,6 +181,7 @@ export class PreferenceManager {
     } catch (e) {
       dump(`[PaperPilot] Failed to save preferences: ${e}\n`);
     }
+    EventBus.emit("preferences:changed");
   }
 
   static getActiveAIConfig(): AIProviderConfig {

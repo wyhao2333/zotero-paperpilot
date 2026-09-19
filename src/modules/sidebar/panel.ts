@@ -169,7 +169,7 @@ export class SidebarPanel {
     <html:div style="display:flex; gap:4px;">
       <html:button class="paperpilot-btn" id="pp-btn-digest" title="一键生成全文精读报告">📑 全文速读</html:button>
       <html:button class="paperpilot-btn" id="pp-btn-export" title="导出对话至 Zotero 笔记">💾 笔记</html:button>
-      <html:button class="paperpilot-btn" id="pp-btn-clear" title="清空当前论文对话">🗑️</html:button>
+      <html:button class="paperpilot-btn" id="pp-btn-clear" title="清空当前会话消息">🗑️</html:button>
     </html:div>
   </html:div>
 
@@ -181,23 +181,26 @@ export class SidebarPanel {
 
   <!-- Tab 1: Chat & Interpretation with Full-text Context -->
   <html:div class="paperpilot-tab-content" id="tab-content-chat" style="display:flex;">
-    <html:div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:4px;">
-      <html:div style="display:flex; align-items:center; gap:3px; min-width:0; flex:1;">
-        <html:span style="font-size:11px; color:var(--pp-text-muted); flex-shrink:0;">会话:</html:span>
-        <html:select id="pp-session-select" style="font-size:11px; max-width:115px; padding:2px 3px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text); flex:1; min-width:0;"></html:select>
-        <html:button class="paperpilot-btn" id="pp-btn-new-session" title="新建对话" style="padding:1px 5px; font-size:11px; flex-shrink:0;">+</html:button>
-      </html:div>
-      <html:div style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
-        <html:span style="font-size:11px; color:var(--pp-text-muted);">领域:</html:span>
-        <html:select id="pp-domain-select" style="font-size:11px; padding:2px 4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
-          <html:option value="general">通用学术 (跨学科)</html:option>
-          <html:option value="cs_ai">计算机与人工智能 (CS/AI)</html:option>
-          <html:option value="med_bio">医学与生物生命科学 (Med/Bio)</html:option>
-          <html:option value="econ_social">经济金融与人文社科</html:option>
-          <html:option value="engineering">工程与物理科学</html:option>
-          <html:option value="custom">自定义领域</html:option>
-        </html:select>
-      </html:div>
+    <!-- Row 1: Session Controls -->
+    <html:div style="display:flex; align-items:center; gap:4px; margin-bottom:4px;">
+      <html:span style="font-size:11px; color:var(--pp-text-muted); flex-shrink:0;">会话:</html:span>
+      <html:select id="pp-session-select" style="font-size:11px; flex:1; min-width:0; padding:2px 4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);"></html:select>
+      <html:button class="paperpilot-btn" id="pp-btn-new-session" title="新建对话" style="padding:1px 6px; font-size:11px; flex-shrink:0;">＋</html:button>
+      <html:button class="paperpilot-btn" id="pp-btn-rename-session" title="重命名当前对话" style="padding:1px 6px; font-size:11px; flex-shrink:0;">✎</html:button>
+      <html:button class="paperpilot-btn" id="pp-btn-delete-session" title="删除当前对话" style="padding:1px 6px; font-size:11px; flex-shrink:0;">🗑</html:button>
+    </html:div>
+
+    <!-- Row 2: Domain Selection -->
+    <html:div style="display:flex; align-items:center; gap:4px; margin-bottom:6px;">
+      <html:span style="font-size:11px; color:var(--pp-text-muted); flex-shrink:0;">领域:</html:span>
+      <html:select id="pp-domain-select" style="font-size:11px; flex:1; padding:2px 4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
+        <html:option value="general">通用学术 (跨学科)</html:option>
+        <html:option value="cs_ai">计算机与人工智能 (CS/AI)</html:option>
+        <html:option value="med_bio">医学与生物生命科学 (Med/Bio)</html:option>
+        <html:option value="econ_social">经济金融与人文社科</html:option>
+        <html:option value="engineering">工程与物理科学</html:option>
+        <html:option value="custom">自定义领域</html:option>
+      </html:select>
     </html:div>
 
     <html:div class="paperpilot-chat-history" id="pp-chat-container"></html:div>
@@ -269,6 +272,33 @@ export class SidebarPanel {
       <html:div>
         <html:label style="font-weight:600; display:block; margin-bottom:4px;">模型名称 (Model):</html:label>
         <html:input type="text" id="cfg-model" placeholder="e.g. glm-4-flash, deepseek-chat" style="width:100%; box-sizing:border-box; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);" />
+      </html:div>
+
+      <html:hr style="border:none; border-top:1px solid var(--pp-border); margin:4px 0;"/>
+
+      <html:div>
+        <html:label style="font-weight:600; display:block; margin-bottom:4px;">全文精读策略:</html:label>
+        <html:select id="cfg-digest-strategy" style="width:100%; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
+          <html:option value="auto">自适应 (推荐，根据论文长度自动选择)</html:option>
+          <html:option value="single-pass">单次直出 (Single Pass, 一次请求完整解读)</html:option>
+          <html:option value="map-reduce">并发分段 (Map-Reduce, 超长论文分章节提炼)</html:option>
+        </html:select>
+      </html:div>
+
+      <html:div style="display:flex; gap:8px;">
+        <html:div style="flex:1;">
+          <html:label style="font-weight:600; display:block; margin-bottom:4px;">并发度 (1-10):</html:label>
+          <html:input type="number" id="cfg-digest-concurrency" min="1" max="10" value="4" style="width:100%; box-sizing:border-box; padding:4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);" />
+        </html:div>
+        <html:div style="flex:1;">
+          <html:label style="font-weight:600; display:block; margin-bottom:4px;">单次上限字符:</html:label>
+          <html:input type="number" id="cfg-digest-max-chars" min="10000" max="150000" step="1000" value="48000" style="width:100%; box-sizing:border-box; padding:4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);" />
+        </html:div>
+      </html:div>
+
+      <html:div style="display:flex; align-items:center; gap:6px;">
+        <html:input type="checkbox" id="cfg-ai-trans-context" />
+        <html:label for="cfg-ai-trans-context">AI 翻译自动结合论文段落上下文消歧</html:label>
       </html:div>
 
       <html:button class="paperpilot-btn primary" id="cfg-btn-save" style="padding:6px; justify-content:center; margin-top:4px;">💾 保存设置</html:button>
@@ -349,7 +379,9 @@ export class SidebarPanel {
     this.initSettingsUI();
   }
 
-  private initSettingsUI(): void {
+  private onPrefChangeHandler: (() => void) | null = null;
+
+  public syncSettingsUIFromPreferences(): void {
     const prefs = PreferenceManager.get();
     const providerSelect = this.container.querySelector("#cfg-ai-provider") as HTMLSelectElement;
     const transSelect = this.container.querySelector("#cfg-trans-service") as HTMLSelectElement;
@@ -358,6 +390,41 @@ export class SidebarPanel {
     const baseUrlInput = this.container.querySelector("#cfg-base-url") as HTMLInputElement;
     const modelInput = this.container.querySelector("#cfg-model") as HTMLInputElement;
     const domainSelect = this.container.querySelector("#pp-domain-select") as HTMLSelectElement;
+    const digestStrategySelect = this.container.querySelector("#cfg-digest-strategy") as HTMLSelectElement;
+    const digestConcurrencyInput = this.container.querySelector("#cfg-digest-concurrency") as HTMLInputElement;
+    const digestMaxCharsInput = this.container.querySelector("#cfg-digest-max-chars") as HTMLInputElement;
+    const aiTransContextCb = this.container.querySelector("#cfg-ai-trans-context") as HTMLInputElement;
+
+    if (transSelect) transSelect.value = prefs.translationService;
+    if (autoTransCb) autoTransCb.checked = prefs.autoTranslateSelection;
+    if (providerSelect) providerSelect.value = prefs.selectedAIProvider;
+    if (domainSelect) domainSelect.value = prefs.defaultDomain;
+    if (digestStrategySelect) digestStrategySelect.value = prefs.digestStrategy || "auto";
+    if (digestConcurrencyInput) digestConcurrencyInput.value = String(prefs.digestConcurrency || 4);
+    if (digestMaxCharsInput) digestMaxCharsInput.value = String(prefs.digestSinglePassMaxChars || 48000);
+    if (aiTransContextCb) aiTransContextCb.checked = prefs.aiTranslationUseContext !== false;
+
+    if (providerSelect && apiKeyInput && baseUrlInput && modelInput) {
+      const pKey = providerSelect.value;
+      const config = prefs.aiProviders[pKey] || DEFAULT_AI_PROVIDERS[pKey] || DEFAULT_AI_PROVIDERS.custom;
+      apiKeyInput.value = config.apiKey || "";
+      baseUrlInput.value = config.baseUrl || "";
+      modelInput.value = config.model || "";
+    }
+  }
+
+  private initSettingsUI(): void {
+    const providerSelect = this.container.querySelector("#cfg-ai-provider") as HTMLSelectElement;
+    const transSelect = this.container.querySelector("#cfg-trans-service") as HTMLSelectElement;
+    const autoTransCb = this.container.querySelector("#cfg-auto-trans") as HTMLInputElement;
+    const apiKeyInput = this.container.querySelector("#cfg-api-key") as HTMLInputElement;
+    const baseUrlInput = this.container.querySelector("#cfg-base-url") as HTMLInputElement;
+    const modelInput = this.container.querySelector("#cfg-model") as HTMLInputElement;
+    const domainSelect = this.container.querySelector("#pp-domain-select") as HTMLSelectElement;
+    const digestStrategySelect = this.container.querySelector("#cfg-digest-strategy") as HTMLSelectElement;
+    const digestConcurrencyInput = this.container.querySelector("#cfg-digest-concurrency") as HTMLInputElement;
+    const digestMaxCharsInput = this.container.querySelector("#cfg-digest-max-chars") as HTMLInputElement;
+    const aiTransContextCb = this.container.querySelector("#cfg-ai-trans-context") as HTMLInputElement;
 
     if (
       !providerSelect ||
@@ -366,33 +433,29 @@ export class SidebarPanel {
       !apiKeyInput ||
       !baseUrlInput ||
       !modelInput ||
-      !domainSelect
+      !domainSelect ||
+      !digestStrategySelect ||
+      !digestConcurrencyInput ||
+      !digestMaxCharsInput ||
+      !aiTransContextCb
     ) {
       dump(
-        `[PaperPilot Sidebar] ERROR: Controls found: providerSelect=${!!providerSelect}, transSelect=${!!transSelect}, autoTransCb=${!!autoTransCb}, apiKeyInput=${!!apiKeyInput}, baseUrlInput=${!!baseUrlInput}, modelInput=${!!modelInput}, domainSelect=${!!domainSelect}\n`
+        `[PaperPilot Sidebar] ERROR: Controls found: providerSelect=${!!providerSelect}, transSelect=${!!transSelect}, autoTransCb=${!!autoTransCb}, apiKeyInput=${!!apiKeyInput}, baseUrlInput=${!!baseUrlInput}, modelInput=${!!modelInput}, domainSelect=${!!domainSelect}, digestStrategySelect=${!!digestStrategySelect}, digestConcurrencyInput=${!!digestConcurrencyInput}, digestMaxCharsInput=${!!digestMaxCharsInput}, aiTransContextCb=${!!aiTransContextCb}\n`
       );
       throw new Error(
-        `PaperPilot settings UI incomplete: providerSelect=${!!providerSelect}, transSelect=${!!transSelect}, autoTransCb=${!!autoTransCb}, apiKeyInput=${!!apiKeyInput}, baseUrlInput=${!!baseUrlInput}, modelInput=${!!modelInput}, domainSelect=${!!domainSelect}`
+        "PaperPilot settings UI incomplete"
       );
     }
 
-    if (transSelect) transSelect.value = prefs.translationService;
-    if (autoTransCb) autoTransCb.checked = prefs.autoTranslateSelection;
-    if (providerSelect) providerSelect.value = prefs.selectedAIProvider;
-    if (domainSelect) domainSelect.value = prefs.defaultDomain;
+    this.syncSettingsUIFromPreferences();
 
-    const updateProviderFields = () => {
+    providerSelect.addEventListener("change", () => {
+      const prefs = PreferenceManager.get();
       const pKey = providerSelect.value;
       const config = prefs.aiProviders[pKey] || DEFAULT_AI_PROVIDERS[pKey] || DEFAULT_AI_PROVIDERS.custom;
       apiKeyInput.value = config.apiKey || "";
       baseUrlInput.value = config.baseUrl || "";
       modelInput.value = config.model || "";
-    };
-
-    updateProviderFields();
-
-    providerSelect.addEventListener("change", () => {
-      updateProviderFields();
     });
 
     // Immediate domain synchronization: switching domain in sidebar updates defaultDomain immediately
@@ -404,19 +467,27 @@ export class SidebarPanel {
 
     const saveBtn = this.container.querySelector("#cfg-btn-save");
     saveBtn?.addEventListener("click", () => {
+      const fresh = PreferenceManager.get();
       const pKey = providerSelect.value;
-      const currentConfig = prefs.aiProviders[pKey] || { ...DEFAULT_AI_PROVIDERS[pKey] };
+      const currentConfig = { ...(fresh.aiProviders[pKey] || DEFAULT_AI_PROVIDERS[pKey] || DEFAULT_AI_PROVIDERS.custom) };
       currentConfig.apiKey = apiKeyInput.value.trim();
       currentConfig.baseUrl = baseUrlInput.value.trim();
       currentConfig.model = modelInput.value.trim();
 
-      prefs.aiProviders[pKey] = currentConfig;
-      prefs.selectedAIProvider = pKey;
-      prefs.translationService = transSelect.value as any;
-      prefs.autoTranslateSelection = autoTransCb.checked;
-      prefs.defaultDomain = domainSelect.value as DomainType;
-
-      PreferenceManager.set(prefs);
+      PreferenceManager.set({
+        selectedAIProvider: pKey,
+        aiProviders: {
+          ...fresh.aiProviders,
+          [pKey]: currentConfig,
+        },
+        translationService: transSelect.value as any,
+        autoTranslateSelection: autoTransCb.checked,
+        defaultDomain: domainSelect.value as DomainType,
+        digestStrategy: digestStrategySelect.value as any,
+        digestConcurrency: parseInt(digestConcurrencyInput.value, 10) || 4,
+        digestSinglePassMaxChars: parseInt(digestMaxCharsInput.value, 10) || 48000,
+        aiTranslationUseContext: aiTransContextCb.checked,
+      });
 
       const status = this.container.querySelector("#cfg-save-status") as HTMLElement;
       if (status) {
@@ -424,6 +495,13 @@ export class SidebarPanel {
         setTimeout(() => (status.style.display = "none"), 2000);
       }
     });
+  }
+
+  public destroy(): void {
+    if (this.onPrefChangeHandler) {
+      EventBus.off("preferences:changed", this.onPrefChangeHandler);
+      this.onPrefChangeHandler = null;
+    }
   }
 
   private bindEvents(): void {
@@ -444,8 +522,18 @@ export class SidebarPanel {
             content.style.display = name === tabName ? "flex" : "none";
           }
         });
+
+        if (tabName === "settings") {
+          this.syncSettingsUIFromPreferences();
+        }
       });
     });
+
+    // Preferences change listener: auto sync settings tab
+    this.onPrefChangeHandler = () => {
+      this.syncSettingsUIFromPreferences();
+    };
+    EventBus.on("preferences:changed", this.onPrefChangeHandler);
 
     // Close quote banner
     this.container.querySelector("#pp-close-quote")?.addEventListener("click", () => {
@@ -488,6 +576,38 @@ export class SidebarPanel {
       await StorageManager.savePDFHistory(this.pdfHistory);
       this.updateSessionSelectUI();
       this.chatView.render(newSession.messages);
+    });
+
+    // Rename session button
+    const renameSessionBtn = this.container.querySelector("#pp-btn-rename-session");
+    renameSessionBtn?.addEventListener("click", async () => {
+      const activeSession = this.getActiveSession();
+      const promptFn = win?.prompt ? win.prompt.bind(win) : (typeof prompt !== "undefined" ? prompt : null);
+      const newTitle = promptFn ? promptFn("重命名当前对话", activeSession.title) : null;
+      if (newTitle && newTitle.trim()) {
+        const ok = StorageManager.renameSession(this.pdfHistory, this.pdfHistory.activeSessionId, newTitle.trim());
+        if (ok) {
+          await StorageManager.savePDFHistory(this.pdfHistory);
+          this.updateSessionSelectUI();
+        }
+      }
+    });
+
+    // Delete session button
+    const deleteSessionBtn = this.container.querySelector("#pp-btn-delete-session");
+    deleteSessionBtn?.addEventListener("click", async () => {
+      const activeSession = this.getActiveSession();
+      const confirmFn = win?.confirm ? win.confirm.bind(win) : (typeof confirm !== "undefined" ? confirm : null);
+      const ok = confirmFn
+        ? confirmFn(`确定删除会话【${activeSession.title}】吗？\n该操作将删除该会话中的全部 PaperPilot 消息。`)
+        : true;
+      if (ok) {
+        StorageManager.deleteSession(this.pdfHistory, this.pdfHistory.activeSessionId);
+        await StorageManager.savePDFHistory(this.pdfHistory);
+        this.updateSessionSelectUI();
+        const session = this.getActiveSession();
+        this.chatView.render(session.messages);
+      }
     });
 
     // Header buttons
@@ -565,6 +685,18 @@ export class SidebarPanel {
 
   private async handleUserSendMessage(content: string, quote?: string): Promise<void> {
     const session = this.getActiveSession();
+
+    // Auto-title session if it's default "对话 X" or "新对话"
+    const isDefaultTitle = !session.title || /^对话\s*\d+$/i.test(session.title.trim()) || session.title.trim() === "新对话";
+    if (isDefaultTitle) {
+      const promptText = (content || quote || "").trim().replace(/\r?\n|\r/g, " ");
+      if (promptText) {
+        const newTitle = promptText.length > 28 ? promptText.slice(0, 28) + "..." : promptText;
+        StorageManager.renameSession(this.pdfHistory, session.id, newTitle);
+        this.updateSessionSelectUI();
+      }
+    }
+
     const userMsg: ChatMessage = {
       id: "u_" + Date.now(),
       role: "user",
@@ -696,7 +828,17 @@ export class SidebarPanel {
 
   private async handleGenerateDigest(): Promise<void> {
     this.switchTab("chat");
-    const session = this.getActiveSession();
+    let session = this.getActiveSession();
+    if (session.messages && session.messages.length > 0) {
+      session = StorageManager.createSession(this.pdfHistory, "全文精读");
+      this.pdfHistory.activeSessionId = session.id;
+      this.updateSessionSelectUI();
+      this.chatView.render(session.messages);
+    } else {
+      StorageManager.renameSession(this.pdfHistory, session.id, "全文精读");
+      this.updateSessionSelectUI();
+    }
+
     const userMsg: ChatMessage = {
       id: "u_" + Date.now(),
       role: "user",

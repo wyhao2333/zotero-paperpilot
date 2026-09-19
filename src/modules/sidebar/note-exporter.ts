@@ -1,4 +1,5 @@
 import { ChatMessage } from "../../types/zotero";
+import { MarkdownMathRenderer } from "../rendering/markdown-math";
 
 export class NoteExporter {
   static async exportToZoteroNote(parentItemID: number, title: string, messages: ChatMessage[]): Promise<boolean> {
@@ -11,7 +12,8 @@ export class NoteExporter {
       const noteItem = new Zotero.Item("note");
       noteItem.parentItemID = parentItemID;
 
-      let html = `<h2>📖 PaperPilot 伴读笔记: ${this.escape(title || "文献笔记")}</h2>`;
+      let html = `<div data-schema-version="9">\n`;
+      html += `<h1>📖 PaperPilot 伴读笔记: ${this.escape(title || "文献笔记")}</h1>`;
       html += `<p><em>导出时间: ${new Date().toLocaleString()}</em></p><hr/>`;
 
       for (const msg of messages) {
@@ -24,9 +26,11 @@ export class NoteExporter {
         } else if (msg.role === "assistant") {
           const domainBadge = msg.domain ? ` [${this.escape(msg.domain)}]` : "";
           html += `<p><strong>🤖 AI 回答${domainBadge}:</strong></p>`;
-          html += `<div>${this.formatMarkdownToHtml(msg.content)}</div><hr/>`;
+          html += `<div>${MarkdownMathRenderer.renderForZoteroNote(msg.content)}</div><hr/>`;
         }
       }
+
+      html += `\n</div>`;
 
       noteItem.setNote(html);
       await noteItem.saveTx();
@@ -37,20 +41,12 @@ export class NoteExporter {
     }
   }
 
-  private static formatMarkdownToHtml(md: string): string {
-    return md
-      .replace(/### (.*?)\n/g, "<h4>$1</h4>")
-      .replace(/## (.*?)\n/g, "<h3>$1</h3>")
-      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.*?)\*/g, "<em>$1</em>")
-      .replace(/\n\n/g, "<br/><br/>")
-      .replace(/\n/g, "<br/>");
-  }
-
   private static escape(str: string): string {
     return (str || "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 }

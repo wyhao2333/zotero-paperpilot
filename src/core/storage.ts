@@ -167,16 +167,38 @@ export class StorageManager {
   }
 
   /**
+   * Renames a session within a PDF history.
+   */
+  static renameSession(history: PDFChatHistory, sessionId: string, newTitle: string): boolean {
+    if (!history || !history.sessions) return false;
+    const clean = (newTitle || "").trim().slice(0, 60);
+    if (!clean) return false;
+
+    const session = history.sessions.find((s) => s.id === sessionId);
+    if (!session) return false;
+
+    session.title = clean;
+    session.lastUpdated = Date.now();
+    history.lastUpdated = Date.now();
+    return true;
+  }
+
+  /**
    * Deletes a session within a PDF history, maintaining at least one active session.
    */
-  static deleteSession(history: PDFChatHistory, sessionId: string): void {
-    if (!history.sessions) return;
+  static deleteSession(history: PDFChatHistory, sessionId: string): boolean {
+    if (!history.sessions) {
+      this.createSession(history, "对话 1");
+      return true;
+    }
     history.sessions = history.sessions.filter((s) => s.id !== sessionId);
     if (history.sessions.length === 0) {
       this.createSession(history, "对话 1");
     } else if (history.activeSessionId === sessionId) {
       history.activeSessionId = history.sessions[0].id;
     }
+    history.lastUpdated = Date.now();
+    return true;
   }
 
   /**

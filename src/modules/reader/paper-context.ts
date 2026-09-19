@@ -6,6 +6,37 @@ export interface PaperDocumentContext {
   totalPages: number;
 }
 
+export interface NormalizedWithIndexMap {
+  normalized: string;
+  indexMap: number[];
+}
+
+export function normalizeWithIndexMap(text: string): NormalizedWithIndexMap {
+  if (!text) return { normalized: "", indexMap: [] };
+  const indexMap: number[] = [];
+  let normalized = "";
+  let inWhitespace = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (/\s/.test(ch)) {
+      if (!inWhitespace) {
+        if (normalized.length > 0) {
+          normalized += " ";
+          indexMap.push(i);
+        }
+        inWhitespace = true;
+      }
+    } else {
+      inWhitespace = false;
+      normalized += ch;
+      indexMap.push(i);
+    }
+  }
+
+  return { normalized, indexMap };
+}
+
 export class PaperContextService {
   private static cache: Map<number, PaperDocumentContext> = new Map();
 
@@ -141,14 +172,19 @@ export class PaperContextService {
     const cleanSel = selectedText.trim().replace(/\s+/g, " ");
     const sample = cleanSel.length > 40 ? cleanSel.substring(0, 40) : cleanSel;
 
-    // Search in full text
-    const lowerFull = doc.text.toLowerCase().replace(/\s+/g, " ");
+    // Search in full text using index mapping
+    const { normalized, indexMap } = normalizeWithIndexMap(doc.text);
+    const lowerNorm = normalized.toLowerCase();
     const lowerSample = sample.toLowerCase();
-    const idx = lowerFull.indexOf(lowerSample);
+    const normIdx = lowerNorm.indexOf(lowerSample);
 
-    if (idx !== -1) {
-      const start = Math.max(0, idx - 600);
-      const end = Math.min(doc.text.length, idx + sample.length + 800);
+    if (normIdx !== -1 && indexMap.length > 0) {
+      const normEndIdx = Math.min(indexMap.length - 1, normIdx + lowerSample.length - 1);
+      const origStart = indexMap[normIdx];
+      const origEnd = indexMap[normEndIdx] + 1;
+
+      const start = Math.max(0, origStart - 600);
+      const end = Math.min(doc.text.length, origEnd + 800);
       const excerpt = doc.text.substring(start, end).trim();
       return `【所选引文在论文中的所在段落与局部上下文】:\n"""\n...${excerpt}...\n"""`;
     }
@@ -248,11 +284,19 @@ export class PaperContextService {
       if (!doc || !doc.text) return "";
       const cleanSel = selectedText.trim().replace(/\s+/g, " ");
       const sample = cleanSel.length > 30 ? cleanSel.substring(0, 30) : cleanSel;
-      const lowerFull = doc.text.toLowerCase().replace(/\s+/g, " ");
-      const idx = lowerFull.indexOf(sample.toLowerCase());
-      if (idx !== -1) {
-        const start = Math.max(0, idx - 300);
-        const end = Math.min(doc.text.length, idx + sample.length + 300);
+
+      const { normalized, indexMap } = normalizeWithIndexMap(doc.text);
+      const lowerNorm = normalized.toLowerCase();
+      const lowerSample = sample.toLowerCase();
+      const normIdx = lowerNorm.indexOf(lowerSample);
+
+      if (normIdx !== -1 && indexMap.length > 0) {
+        const normEndIdx = Math.min(indexMap.length - 1, normIdx + lowerSample.length - 1);
+        const origStart = indexMap[normIdx];
+        const origEnd = indexMap[normEndIdx] + 1;
+
+        const start = Math.max(0, origStart - 300);
+        const end = Math.min(doc.text.length, origEnd + 300);
         return doc.text.substring(start, end).trim();
       }
     } catch (e) {

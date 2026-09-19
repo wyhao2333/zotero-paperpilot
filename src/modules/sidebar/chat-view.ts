@@ -1,4 +1,5 @@
 import { ChatMessage } from "../../types/zotero";
+import katex from "katex";
 
 const HTML_NS = "http://www.w3.org/1999/xhtml";
 
@@ -258,9 +259,61 @@ export class ChatView {
   }
 
   private renderMarkdown(md: string): string {
+    return ChatView.renderMarkdownContent(md);
+  }
+
+  /**
+   * Static renderer converting Markdown and LaTeX math delimiters into valid XHTML/MathML markup.
+   * Supported delimiters:
+   * - Block math: $$...$$ and \[...\]
+   * - Inline math: \(...\) and $...$
+   * Delimiters are never displayed as raw text.
+   */
+  static renderMarkdownContent(md: string): string {
     if (!md) return "";
-    let safe = this.escape(md);
-    return safe
+
+    interface MathToken {
+      id: string;
+      raw: string;
+      block: boolean;
+    }
+
+    const mathTokens: MathToken[] = [];
+    let tokenIndex = 0;
+
+    // 1. Block math: $$ ... $$
+    let text = md.replace(/\$\$([\s\S]*?)\$\$/g, (_, tex) => {
+      const id = `__PPMATH_BLOCK_${tokenIndex++}__`;
+      mathTokens.push({ id, raw: tex, block: true });
+      return id;
+    });
+
+    // 2. Block math: \[ ... \]
+    text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, tex) => {
+      const id = `__PPMATH_BLOCK_${tokenIndex++}__`;
+      mathTokens.push({ id, raw: tex, block: true });
+      return id;
+    });
+
+    // 3. Inline math: \( ... \)
+    text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, tex) => {
+      const id = `__PPMATH_INLINE_${tokenIndex++}__`;
+      mathTokens.push({ id, raw: tex, block: false });
+      return id;
+    });
+
+    // 4. Inline math: $ ... $ (excluding escaped \$)
+    text = text.replace(/(?<!\\)\$((?:[^\$\n\\]|\\.)+)\$/g, (_, tex) => {
+      const id = `__PPMATH_INLINE_${tokenIndex++}__`;
+      mathTokens.push({ id, raw: tex, block: false });
+      return id;
+    });
+
+    // Escape remaining non-math content for safe XML parsing
+    let safe = this.escape(text);
+
+    // Markdown typography
+    safe = safe
       .replace(/### (.*?)(?:\n|$)/g, "<html:h4 style='margin:6px 0 3px 0; font-size:13px; color:var(--pp-primary);'>$1</html:h4>")
       .replace(/## (.*?)(?:\n|$)/g, "<html:h3 style='margin:8px 0 4px 0; font-size:14px;'>$1</html:h3>")
       .replace(/\*\*(.*?)\*\*/g, "<html:strong>$1</html:strong>")
@@ -268,14 +321,40 @@ export class ChatView {
       .replace(/`([^`]+)`/g, "<html:code style='background:rgba(0,0,0,0.06); padding:1px 4px; border-radius:3px;'>$1</html:code>")
       .replace(/\n\n/g, "<html:p style='margin:4px 0;'></html:p>")
       .replace(/\n/g, "<html:br/>");
+
+    // Replace math tokens with rendered KaTeX MathML
+    for (const token of mathTokens) {
+      let rendered = "";
+      try {
+        rendered = katex.renderToString(token.raw.trim(), {
+          displayMode: token.block,
+          output: "mathml",
+          throwOnError: false,
+        });
+      } catch (err) {
+        rendered = `<span class="katex-fallback">${this.escape(token.raw.trim())}</span>`;
+      }
+
+      const mathHtml = token.block
+        ? `<html:div class="paperpilot-math-block" style="display:block; margin:6px 0; text-align:center; overflow-x:auto;">${rendered}</html:div>`
+        : `<html:span class="paperpilot-math-inline" style="display:inline-block; vertical-align:middle;">${rendered}</html:span>`;
+
+      safe = safe.replace(token.id, mathHtml);
+    }
+
+    return safe;
   }
 
-  private escape(str: string): string {
+  static escape(str: string): string {
     return (str || "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&apos;");
+  }
+
+  private escape(str: string): string {
+    return ChatView.escape(str);
   }
 }

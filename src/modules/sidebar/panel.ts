@@ -1,7 +1,7 @@
 import { EventBus } from "../../core/event-bus";
 import { PreferenceManager, DEFAULT_AI_PROVIDERS } from "../../core/preferences";
 import { StorageManager } from "../../core/storage";
-import { ChatMessage, DomainType, PaperHistory } from "../../types/zotero";
+import { ChatMessage, ChatSession, DomainType, PaperHistory, PDFChatHistory } from "../../types/zotero";
 import { ChatView } from "./chat-view";
 import { NoteExporter } from "./note-exporter";
 import { PromptManager, DOMAIN_PROMPTS } from "../ai/prompts";
@@ -19,7 +19,14 @@ export class SidebarPanel {
   private currentTitle: string = "";
   private currentParentItemID: number = 0;
   private currentAttachmentID: number = 0;
-  private history: PaperHistory = { itemKey: "", title: "", messages: [], lastUpdated: Date.now() };
+  private pdfHistory: PDFChatHistory = {
+    schemaVersion: 2,
+    storageKey: "",
+    title: "",
+    activeSessionId: "",
+    sessions: [],
+    lastUpdated: Date.now(),
+  };
   private pendingQuote: string = "";
 
   constructor(container: HTMLElement) {
@@ -27,6 +34,38 @@ export class SidebarPanel {
     this.render();
     this.bindEvents();
     // Panel registration is exclusively performed in onRender where tabID is explicitly known.
+  }
+
+  public getActiveSession(): ChatSession {
+    if (!this.pdfHistory.sessions || this.pdfHistory.sessions.length === 0) {
+      const s = StorageManager.createSession(this.pdfHistory, "对话 1");
+      return s;
+    }
+    const found = this.pdfHistory.sessions.find((s) => s.id === this.pdfHistory.activeSessionId);
+    if (found) return found;
+    this.pdfHistory.activeSessionId = this.pdfHistory.sessions[0].id;
+    return this.pdfHistory.sessions[0];
+  }
+
+  public updateSessionSelectUI(): void {
+    const select = this.container.querySelector("#pp-session-select") as HTMLSelectElement;
+    if (!select) return;
+    const doc = this.container.ownerDocument;
+
+    while (select.firstChild) {
+      select.removeChild(select.firstChild);
+    }
+
+    for (const s of this.pdfHistory.sessions) {
+      const opt = doc.createElementNS(HTML_NS, "option") as HTMLOptionElement;
+      opt.value = s.id;
+      opt.textContent = s.title || "未命名会话";
+      if (s.id === this.pdfHistory.activeSessionId) {
+        opt.selected = true;
+      }
+      select.appendChild(opt);
+    }
+    select.value = this.pdfHistory.activeSessionId;
   }
 
   async loadPaper(
@@ -53,9 +92,16 @@ export class SidebarPanel {
       titleEl.textContent = this.currentTitle;
     }
 
-    this.history = await StorageManager.getHistory(itemKey);
-    this.history.title = this.currentTitle;
-    this.chatView.render(this.history.messages);
+    this.pdfHistory = await StorageManager.getPDFHistory(
+      this.currentAttachmentID,
+      itemKey,
+      this.currentTitle
+    );
+    this.pdfHistory.title = this.currentTitle;
+
+    this.updateSessionSelectUI();
+    const session = this.getActiveSession();
+    this.chatView.render(session.messages);
   }
 
   /**
@@ -135,16 +181,23 @@ export class SidebarPanel {
 
   <!-- Tab 1: Chat & Interpretation with Full-text Context -->
   <html:div class="paperpilot-tab-content" id="tab-content-chat" style="display:flex;">
-    <html:div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-      <html:span style="font-size:11px; color:var(--pp-text-muted);">解读领域:</html:span>
-      <html:select id="pp-domain-select" style="font-size:11px; padding:2px 4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
-        <html:option value="general">通用学术 (跨学科)</html:option>
-        <html:option value="cs_ai">计算机与人工智能 (CS/AI)</html:option>
-        <html:option value="med_bio">医学与生物生命科学 (Med/Bio)</html:option>
-        <html:option value="econ_social">经济金融与人文社科</html:option>
-        <html:option value="engineering">工程与物理科学</html:option>
-        <html:option value="custom">自定义领域</html:option>
-      </html:select>
+    <html:div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:4px;">
+      <html:div style="display:flex; align-items:center; gap:3px; min-width:0; flex:1;">
+        <html:span style="font-size:11px; color:var(--pp-text-muted); flex-shrink:0;">会话:</html:span>
+        <html:select id="pp-session-select" style="font-size:11px; max-width:115px; padding:2px 3px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text); flex:1; min-width:0;"></html:select>
+        <html:button class="paperpilot-btn" id="pp-btn-new-session" title="新建对话" style="padding:1px 5px; font-size:11px; flex-shrink:0;">+</html:button>
+      </html:div>
+      <html:div style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
+        <html:span style="font-size:11px; color:var(--pp-text-muted);">领域:</html:span>
+        <html:select id="pp-domain-select" style="font-size:11px; padding:2px 4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
+          <html:option value="general">通用学术 (跨学科)</html:option>
+          <html:option value="cs_ai">计算机与人工智能 (CS/AI)</html:option>
+          <html:option value="med_bio">医学与生物生命科学 (Med/Bio)</html:option>
+          <html:option value="econ_social">经济金融与人文社科</html:option>
+          <html:option value="engineering">工程与物理科学</html:option>
+          <html:option value="custom">自定义领域</html:option>
+        </html:select>
+      </html:div>
     </html:div>
 
     <html:div class="paperpilot-chat-history" id="pp-chat-container"></html:div>
@@ -419,31 +472,56 @@ export class SidebarPanel {
       }
     });
 
+    // Session switching
+    const sessionSelect = this.container.querySelector("#pp-session-select") as HTMLSelectElement;
+    sessionSelect?.addEventListener("change", async () => {
+      this.pdfHistory.activeSessionId = sessionSelect.value;
+      await StorageManager.savePDFHistory(this.pdfHistory);
+      const session = this.getActiveSession();
+      this.chatView.render(session.messages);
+    });
+
+    // New session button
+    const newSessionBtn = this.container.querySelector("#pp-btn-new-session");
+    newSessionBtn?.addEventListener("click", async () => {
+      const newSession = StorageManager.createSession(this.pdfHistory);
+      await StorageManager.savePDFHistory(this.pdfHistory);
+      this.updateSessionSelectUI();
+      this.chatView.render(newSession.messages);
+    });
+
     // Header buttons
     this.container.querySelector("#pp-btn-digest")?.addEventListener("click", () => {
       this.handleGenerateDigest();
     });
 
     this.container.querySelector("#pp-btn-export")?.addEventListener("click", async () => {
-      if (!this.history.messages.length) {
-        if (win?.alert) win.alert("当前尚无对话记录可导出。");
-        else alert("当前尚无对话记录可导出。");
+      const activeSession = this.getActiveSession();
+      if (!activeSession.messages.length) {
+        if (win?.alert) win.alert("当前会话尚无对话记录可导出。");
+        else alert("当前会话尚无对话记录可导出。");
         return;
       }
-      const ok = await NoteExporter.exportToZoteroNote(this.currentParentItemID, this.currentTitle, this.history.messages);
+      const ok = await NoteExporter.exportToZoteroNote(
+        this.currentParentItemID,
+        `${this.currentTitle} (${activeSession.title})`,
+        activeSession.messages
+      );
       const alertMsg = ok ? "已成功保存为 Zotero 文献笔记！" : "保存笔记失败，请检查条目权限。";
       if (win?.alert) win.alert(alertMsg);
       else alert(alertMsg);
     });
 
     this.container.querySelector("#pp-btn-clear")?.addEventListener("click", async () => {
+      const activeSession = this.getActiveSession();
       const shouldClear = win?.confirm
-        ? win.confirm("确定要清空当前文献的所有 PaperPilot 对话历史吗？")
-        : confirm("确定要清空当前文献的所有 PaperPilot 对话历史吗？");
+        ? win.confirm(`确定要清空当前会话【${activeSession.title}】的对话历史吗？`)
+        : confirm(`确定要清空当前会话【${activeSession.title}】的对话历史吗？`);
 
       if (shouldClear) {
-        await StorageManager.clearHistory(this.currentItemKey);
-        this.history.messages = [];
+        activeSession.messages = [];
+        activeSession.lastUpdated = Date.now();
+        await StorageManager.savePDFHistory(this.pdfHistory);
         this.chatView.render([]);
       }
     });
@@ -486,6 +564,7 @@ export class SidebarPanel {
   }
 
   private async handleUserSendMessage(content: string, quote?: string): Promise<void> {
+    const session = this.getActiveSession();
     const userMsg: ChatMessage = {
       id: "u_" + Date.now(),
       role: "user",
@@ -494,9 +573,10 @@ export class SidebarPanel {
       selectedQuote: quote,
     };
 
-    this.history.messages.push(userMsg);
+    session.messages.push(userMsg);
+    session.lastUpdated = Date.now();
     this.chatView.appendMessage(userMsg);
-    await StorageManager.saveHistory(this.history);
+    await StorageManager.savePDFHistory(this.pdfHistory);
 
     const aiMsgId = "a_" + Date.now();
     const aiMsg: ChatMessage = {
@@ -505,10 +585,10 @@ export class SidebarPanel {
       content: "正在结合论文检索上下文并思考中...",
       timestamp: Date.now(),
     };
-    this.history.messages.push(aiMsg);
+    session.messages.push(aiMsg);
     this.chatView.appendMessage(aiMsg);
 
-    // Retrieve relevant context from PDF full text with fallback error handling
+    // Retrieve relevant context from PDF full text with intent awareness
     let relevantContext = "";
     if (this.currentAttachmentID) {
       try {
@@ -532,8 +612,8 @@ export class SidebarPanel {
       { role: "system", content: systemPrompt },
     ];
 
-    // Append chat history (last 6 messages)
-    for (const m of this.history.messages.slice(-6)) {
+    // Append chat history strictly from ACTIVE session (last 6 messages)
+    for (const m of session.messages.slice(-6)) {
       if (m.id === aiMsgId) break;
       let text = m.content;
       if (m.selectedQuote) {
@@ -553,15 +633,18 @@ export class SidebarPanel {
 
       aiMsg.content = fullResponse;
       this.chatView.finishStreamingMessage(aiMsgId, fullResponse);
-      await StorageManager.saveHistory(this.history);
+      session.lastUpdated = Date.now();
+      await StorageManager.savePDFHistory(this.pdfHistory);
     } catch (e: any) {
       aiMsg.content = `❌ 出错: ${e.message || e}`;
       this.chatView.updateStreamingMessage(aiMsgId, aiMsg.content);
-      await StorageManager.saveHistory(this.history);
+      session.lastUpdated = Date.now();
+      await StorageManager.savePDFHistory(this.pdfHistory);
     }
   }
 
   private async handleInterpret(text: string, domain: DomainType): Promise<void> {
+    const session = this.getActiveSession();
     const promptConfig = DOMAIN_PROMPTS[domain];
     const userMsg: ChatMessage = {
       id: "u_" + Date.now(),
@@ -572,9 +655,10 @@ export class SidebarPanel {
       domain: promptConfig.badge,
     };
 
-    this.history.messages.push(userMsg);
+    session.messages.push(userMsg);
+    session.lastUpdated = Date.now();
     this.chatView.appendMessage(userMsg);
-    await StorageManager.saveHistory(this.history);
+    await StorageManager.savePDFHistory(this.pdfHistory);
 
     const aiMsgId = "a_" + Date.now();
     const aiMsg: ChatMessage = {
@@ -584,7 +668,7 @@ export class SidebarPanel {
       timestamp: Date.now(),
       domain: promptConfig.badge,
     };
-    this.history.messages.push(aiMsg);
+    session.messages.push(aiMsg);
     this.chatView.appendMessage(aiMsg);
 
     const messages = PromptManager.buildInterpretationMessages(text, domain);
@@ -600,25 +684,29 @@ export class SidebarPanel {
 
       aiMsg.content = fullResponse;
       this.chatView.finishStreamingMessage(aiMsgId, fullResponse);
-      await StorageManager.saveHistory(this.history);
+      session.lastUpdated = Date.now();
+      await StorageManager.savePDFHistory(this.pdfHistory);
     } catch (e: any) {
       aiMsg.content = `❌ 解读失败: ${e.message || e}`;
       this.chatView.updateStreamingMessage(aiMsgId, aiMsg.content);
-      await StorageManager.saveHistory(this.history);
+      session.lastUpdated = Date.now();
+      await StorageManager.savePDFHistory(this.pdfHistory);
     }
   }
 
   private async handleGenerateDigest(): Promise<void> {
     this.switchTab("chat");
+    const session = this.getActiveSession();
     const userMsg: ChatMessage = {
       id: "u_" + Date.now(),
       role: "user",
       content: "请为这篇论文生成一键全文精读报告",
       timestamp: Date.now(),
     };
-    this.history.messages.push(userMsg);
+    session.messages.push(userMsg);
+    session.lastUpdated = Date.now();
     this.chatView.appendMessage(userMsg);
-    await StorageManager.saveHistory(this.history);
+    await StorageManager.savePDFHistory(this.pdfHistory);
 
     const aiMsgId = "a_" + Date.now();
     const aiMsg: ChatMessage = {
@@ -628,7 +716,7 @@ export class SidebarPanel {
       timestamp: Date.now(),
       domain: "全文精读",
     };
-    this.history.messages.push(aiMsg);
+    session.messages.push(aiMsg);
     this.chatView.appendMessage(aiMsg);
 
     try {
@@ -647,11 +735,13 @@ export class SidebarPanel {
 
       aiMsg.content = fullResponse;
       this.chatView.finishStreamingMessage(aiMsgId, fullResponse);
-      await StorageManager.saveHistory(this.history);
+      session.lastUpdated = Date.now();
+      await StorageManager.savePDFHistory(this.pdfHistory);
     } catch (e: any) {
       aiMsg.content = `❌ 生成报告失败: ${e.message || e}`;
       this.chatView.updateStreamingMessage(aiMsgId, aiMsg.content);
-      await StorageManager.saveHistory(this.history);
+      session.lastUpdated = Date.now();
+      await StorageManager.savePDFHistory(this.pdfHistory);
     }
   }
 }

@@ -19,9 +19,15 @@ Guidelines:
 2. Maintain any mathematical formulas (e.g., LaTeX), chemical equations, or citation markers verbatim.
 3. Output ONLY the translated text without commentary, pleasantries, or explanations.`;
 
+    let userContent = trimmed;
+    const useContext = PreferenceManager.get().aiTranslationUseContext !== false;
+    if (useContext && options.context && options.context.trim()) {
+      userContent = `【参考上下文 (仅用于辅助理解专有名词、缩写与代词指代，无需翻译参考上下文)】:\n"""\n${options.context.trim()}\n"""\n\n【需要翻译的目标学术选段】:\n"""\n${trimmed}\n"""`;
+    }
+
     return await AIClient.chat([
       { role: "system", content: systemPrompt },
-      { role: "user", content: trimmed },
+      { role: "user", content: userContent },
     ]);
   }
 }

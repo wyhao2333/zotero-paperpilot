@@ -196,6 +196,51 @@ async function runStaticValidation() {
   assert(chatViewTs.includes("<html:div") && chatViewTs.includes('xmlns:html="${HTML_NS}"'), "chat-view.ts must use html: tags under HTML_NS");
   console.log("✅ Check 13 PASS: Reader Sidebar DOM Construction P0 verified.");
 
+  // Check 14: Digest Concurrency, Worker Pool & Retry Policy
+  console.log("\n[Check 14] Verifying Digest Concurrency & Resilience...");
+  const digestTs = fs.readFileSync("src/modules/ai/digest.ts", "utf-8");
+  assert(digestTs.includes("digestConcurrency"), "digest.ts must respect digestConcurrency preference");
+  assert(digestTs.includes("concurrency = Math.max(1, Math.min(10,"), "digest.ts must clamp concurrency between 1 and 10");
+  assert(digestTs.includes("for (let attempt = 0; attempt <= 2; attempt++)"), "digest.ts must retry up to 2 times on transient failures");
+  assert(digestTs.includes("partialSummaries[task.partIndex - 1]"), "digest.ts must preserve part index order");
+  console.log("✅ Check 14 PASS: Digest concurrency, retry backoff, and order preservation verified.");
+
+  // Check 15: Context Strategy & Translation Context
+  console.log("\n[Check 15] Verifying Context Strategy & Translation Context...");
+  const paperCtxTs = fs.readFileSync("src/modules/reader/paper-context.ts", "utf-8");
+  assert(paperCtxTs.includes("hasFullPaperIntent"), "paper-context.ts must implement hasFullPaperIntent");
+  assert(paperCtxTs.includes("getLocalSelectionContext"), "paper-context.ts must implement getLocalSelectionContext");
+  assert(paperCtxTs.includes("getFullPaperContext"), "paper-context.ts must implement getFullPaperContext");
+  assert(paperCtxTs.includes("getTranslationContext"), "paper-context.ts must implement getTranslationContext");
+  console.log("✅ Check 15 PASS: Intent-aware context routing and translation context verified.");
+
+  // Check 16: PDF History Isolation & Multi-Session Scoping
+  console.log("\n[Check 16] Verifying PDF History Isolation & Multi-Session Management...");
+  const storageTs = fs.readFileSync("src/core/storage.ts", "utf-8");
+  assert(storageTs.includes("getPDFStorageKey"), "storage.ts must implement getPDFStorageKey");
+  assert(storageTs.includes("pdf_${attachmentID}"), "storage.ts must isolate storage key by pdf_${attachmentID}");
+  assert(storageTs.includes("schemaVersion: 2"), "storage.ts must enforce schemaVersion 2");
+  assert(storageTs.includes("createSession"), "storage.ts must implement createSession");
+  assert(panelTs.includes("for (const m of session.messages.slice(-6))"), "panel.ts must scope AI prompt history strictly to active session");
+  console.log("✅ Check 16 PASS: PDF history isolation and active session prompt scoping verified.");
+
+  // Check 17: Selection Button State Machine
+  console.log("\n[Check 17] Verifying Selection Button State Machine...");
+  const floatingBarTs = fs.readFileSync("src/modules/reader/floating-bar.ts", "utf-8");
+  assert(floatingBarTs.includes("setActiveButton"), "floating-bar.ts must implement setActiveButton");
+  assert(floatingBarTs.includes('setActiveButton("translate")'), "floating-bar.ts must default to translate active");
+  assert(floatingBarTs.includes('setAttribute("data-active"'), "floating-bar.ts must update data-active attribute");
+  console.log("✅ Check 17 PASS: Selection button state machine verified.");
+
+  // Check 18: LaTeX Math & KaTeX MathML Rendering
+  console.log("\n[Check 18] Verifying LaTeX Math & KaTeX MathML Rendering...");
+  assert(chatViewTs.includes("renderMarkdownContent"), "chat-view.ts must implement renderMarkdownContent");
+  assert(chatViewTs.includes("katex.renderToString"), "chat-view.ts must call katex.renderToString");
+  assert(chatViewTs.includes('output: "mathml"'), "chat-view.ts must configure KaTeX output as mathml");
+  assert(chatViewTs.includes("paperpilot-math-block"), "chat-view.ts must style block math");
+  assert(chatViewTs.includes("paperpilot-math-inline"), "chat-view.ts must style inline math");
+  console.log("✅ Check 18 PASS: KaTeX math delimiters and MathML rendering verified.");
+
   console.log("\n==================================================");
   console.log("STATIC CHECK PASS (Requires manual Zotero GUI verification)");
 }

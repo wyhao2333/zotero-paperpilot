@@ -74,51 +74,59 @@ export class FloatingBarManager {
       btnTrans.textContent = "🌐 翻译";
       btnTrans.id = `paperpilot-${instanceID}-translate`;
       btnTrans.title = "PaperPilot 划词翻译";
-      btnTrans.style.cssText = `
-        background: #2563eb !important;
-        color: #ffffff !important;
-        border: none !important;
-        border-radius: 4px !important;
-        padding: 2px 7px !important;
-        font-size: 12px !important;
-        font-weight: 500 !important;
-        cursor: pointer !important;
-        line-height: 18px !important;
-      `;
 
       // 2. Interpret Button
       const btnInterpret = doc.createElement("button");
       btnInterpret.textContent = "💡 解读";
       btnInterpret.id = `paperpilot-${instanceID}-interpret`;
       btnInterpret.title = "PaperPilot 学术解读 (直接在浮窗显示)";
-      btnInterpret.style.cssText = `
-        background: #f1f5f9 !important;
-        color: #1e293b !important;
-        border: 1px solid #cbd5e1 !important;
-        border-radius: 4px !important;
-        padding: 2px 7px !important;
-        font-size: 12px !important;
-        font-weight: 500 !important;
-        cursor: pointer !important;
-        line-height: 18px !important;
-      `;
 
       // 3. Ask Button
       const btnAsk = doc.createElement("button");
       btnAsk.textContent = "❓ 提问";
       btnAsk.id = `paperpilot-${instanceID}-ask`;
       btnAsk.title = "将选段带入 PaperPilot 伴读侧边栏问答";
-      btnAsk.style.cssText = `
-        background: #f1f5f9 !important;
-        color: #1e293b !important;
-        border: 1px solid #cbd5e1 !important;
-        border-radius: 4px !important;
-        padding: 2px 7px !important;
-        font-size: 12px !important;
-        font-weight: 500 !important;
-        cursor: pointer !important;
-        line-height: 18px !important;
-      `;
+
+      // Dynamic Selection Button State Machine
+      const setActiveButton = (active: "translate" | "interpret" | "ask") => {
+        const activeCss = `
+          background: #2563eb !important;
+          color: #ffffff !important;
+          border: 1px solid #2563eb !important;
+          border-radius: 4px !important;
+          padding: 2px 7px !important;
+          font-size: 12px !important;
+          font-weight: 500 !important;
+          cursor: pointer !important;
+          line-height: 18px !important;
+        `;
+        const inactiveCss = `
+          background: #f1f5f9 !important;
+          color: #1e293b !important;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px !important;
+          padding: 2px 7px !important;
+          font-size: 12px !important;
+          font-weight: 500 !important;
+          cursor: pointer !important;
+          line-height: 18px !important;
+        `;
+
+        btnTrans.style.cssText = active === "translate" ? activeCss : inactiveCss;
+        btnTrans.setAttribute("data-active", active === "translate" ? "true" : "false");
+        btnTrans.setAttribute("aria-pressed", active === "translate" ? "true" : "false");
+
+        btnInterpret.style.cssText = active === "interpret" ? activeCss : inactiveCss;
+        btnInterpret.setAttribute("data-active", active === "interpret" ? "true" : "false");
+        btnInterpret.setAttribute("aria-pressed", active === "interpret" ? "true" : "false");
+
+        btnAsk.style.cssText = active === "ask" ? activeCss : inactiveCss;
+        btnAsk.setAttribute("data-active", active === "ask" ? "true" : "false");
+        btnAsk.setAttribute("aria-pressed", active === "ask" ? "true" : "false");
+      };
+
+      // Default state: translate active, interpret inactive, ask inactive
+      setActiveButton("translate");
 
       btnRow.appendChild(btnTrans);
       btnRow.appendChild(btnInterpret);
@@ -200,12 +208,21 @@ export class FloatingBarManager {
       btnTrans.addEventListener("click", async (e: MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
+        setActiveButton("translate");
         resultCard.style.display = "block";
         if (titleEl) titleEl.textContent = "PaperPilot · 划词翻译";
         if (bodyEl) bodyEl.innerHTML = "<em>正在翻译...</em>";
 
         try {
+          const attachmentID = await PaperContextService.resolveAttachmentID(reader);
+          let context = "";
+          if (attachmentID) {
+            context = await PaperContextService.getTranslationContext(attachmentID, cleanText);
+          }
+
           const translated = await TranslatorManager.translate(cleanText, {
+            attachmentID: attachmentID || undefined,
+            context: context || undefined,
             onProgress: (progressMsg, partialText) => {
               if (bodyEl) {
                 const preview = partialText
@@ -231,6 +248,7 @@ export class FloatingBarManager {
       btnInterpret.addEventListener("click", async (e: MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
+        setActiveButton("interpret");
         resultCard.style.display = "block";
         if (titleEl) titleEl.textContent = "PaperPilot · 学术解读";
         if (bodyEl) bodyEl.innerHTML = "<em>正在进行学术解读...</em>";
@@ -279,6 +297,7 @@ export class FloatingBarManager {
       btnAsk.addEventListener("click", async (e: MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
+        setActiveButton("ask");
 
         btnAsk.textContent = "正在打开 PaperPilot…";
 
@@ -399,10 +418,32 @@ export class FloatingBarManager {
     doc.body.appendChild(bar);
     this.activeFloatingBar = bar;
 
-    bar.querySelector("#pp-fb-trans")?.addEventListener("click", async (e) => {
+    const fbTrans = bar.querySelector("#pp-fb-trans") as HTMLButtonElement;
+    const fbInterp = bar.querySelector("#pp-fb-interpret") as HTMLButtonElement;
+    const fbAsk = bar.querySelector("#pp-fb-ask") as HTMLButtonElement;
+
+    const setStandaloneActive = (active: "translate" | "interpret" | "ask") => {
+      const activeStyle = "background:#2563eb; color:#fff; border:1px solid #2563eb; border-radius:4px; padding:2px 8px; font-size:12px; font-weight:500; cursor:pointer;";
+      const inactiveStyle = "background:#f1f5f9; color:#1e293b; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; font-size:12px; font-weight:500; cursor:pointer;";
+      if (fbTrans) {
+        fbTrans.style.cssText = active === "translate" ? activeStyle : inactiveStyle;
+        fbTrans.setAttribute("data-active", active === "translate" ? "true" : "false");
+      }
+      if (fbInterp) {
+        fbInterp.style.cssText = active === "interpret" ? activeStyle : inactiveStyle;
+        fbInterp.setAttribute("data-active", active === "interpret" ? "true" : "false");
+      }
+      if (fbAsk) {
+        fbAsk.style.cssText = active === "ask" ? activeStyle : inactiveStyle;
+        fbAsk.setAttribute("data-active", active === "ask" ? "true" : "false");
+      }
+    };
+    setStandaloneActive("translate");
+
+    fbTrans?.addEventListener("click", async (e) => {
       e.stopPropagation();
-      const btn = bar.querySelector("#pp-fb-trans") as HTMLButtonElement;
-      if (btn) btn.textContent = "翻译中...";
+      setStandaloneActive("translate");
+      fbTrans.textContent = "翻译中...";
       try {
         const trans = await TranslatorManager.translate(text);
         alert(`【PaperPilot 译文】\n${trans}`);
@@ -412,14 +453,16 @@ export class FloatingBarManager {
       this.hideBar();
     });
 
-    bar.querySelector("#pp-fb-interpret")?.addEventListener("click", (e) => {
+    fbInterp?.addEventListener("click", (e) => {
       e.stopPropagation();
+      setStandaloneActive("interpret");
       this.hideBar();
       PaperPilotSidebarController.openInterpret({ selectedText: text });
     });
 
-    bar.querySelector("#pp-fb-ask")?.addEventListener("click", (e) => {
+    fbAsk?.addEventListener("click", (e) => {
       e.stopPropagation();
+      setStandaloneActive("ask");
       this.hideBar();
       PaperPilotSidebarController.openAsk({ selectedText: text });
     });

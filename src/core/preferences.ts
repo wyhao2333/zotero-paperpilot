@@ -11,6 +11,8 @@ export interface PluginPreferences {
   defaultDomain: DomainType;
   customPromptTemplate: string;
   interpretationPromptOverrides?: Partial<Record<DomainType, string>>;
+  digestConcurrency?: number;
+  aiTranslationUseContext?: boolean;
 }
 
 export const DEFAULT_AI_PROVIDERS: Record<string, AIProviderConfig> = {
@@ -90,6 +92,8 @@ export const DEFAULT_PREFS: PluginPreferences = {
   defaultDomain: "general",
   customPromptTemplate: "请结合上下文对以下内容进行深度学术解读，并解析关键术语：\n\n{text}",
   interpretationPromptOverrides: {},
+  digestConcurrency: 3,
+  aiTranslationUseContext: true,
 };
 
 export class PreferenceManager {

@@ -1,6 +1,9 @@
 export interface TranslateOptions {
   from?: string;
   to: string;
+  context?: string;
+  attachmentID?: number;
+  onProgress?: (msg: string, partialText?: string) => void;
 }
 
 export interface ITranslatorService {

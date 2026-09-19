@@ -1,10 +1,12 @@
 import { AIClient } from "./client";
 import { PaperContextService } from "../reader/paper-context";
+import { PreferenceManager } from "../../core/preferences";
 
 export interface DigestOptions {
   title: string;
   authors?: string;
   attachmentID?: number;
+  concurrency?: number;
   onProgress?: (status: string) => void;
   onChunk?: (delta: string, accumulated: string) => void;
 }
@@ -82,30 +84,78 @@ export class PaperDigestService {
       );
     }
 
-    // Case 3: Long paper -> Map-Reduce multi-stage synthesis
-    if (onProgress) onProgress(`全文共 ${chunks.length} 个片段，正在执行分块提炼与精读...`);
+    // Case 3: Long paper -> Concurrent Map-Reduce multi-stage synthesis
+    const prefs = PreferenceManager.get();
+    const desiredConcurrency = options.concurrency || prefs.digestConcurrency || 3;
+    const concurrency = Math.max(1, Math.min(10, desiredConcurrency));
 
     const groupSize = 3;
-    const partialSummaries: string[] = [];
+    interface PartTask {
+      partIndex: number;
+      totalParts: number;
+      groupChunks: string[];
+    }
 
+    const tasks: PartTask[] = [];
+    const totalParts = Math.ceil(chunks.length / groupSize);
     for (let i = 0; i < chunks.length; i += groupSize) {
       const groupChunks = chunks.slice(i, i + groupSize);
       const partIndex = Math.floor(i / groupSize) + 1;
-      const totalParts = Math.ceil(chunks.length / groupSize);
-
-      if (onProgress) onProgress(`正在精读论文第 ${partIndex}/${totalParts} 部分...`);
-
-      const partPrompt = `请对以下论文片段（第 ${partIndex}/${totalParts} 部分）提取核心要点（研究动机、方法细节、公式、实验结果或结论）：\n\n"""\n${groupChunks.join("\n\n")}\n"""`;
-      const partSummary = await AIClient.chat([
-        {
-          role: "system",
-          content: "你是一位专业学术研究助手，请精炼提取所给论文选段中的关键技术细节、实验数据和方法论要点。",
-        },
-        { role: "user", content: partPrompt },
-      ]);
-
-      partialSummaries.push(`【第 ${partIndex} 部分要点】:\n${partSummary}`);
+      tasks.push({ partIndex, totalParts, groupChunks });
     }
+
+    if (onProgress) {
+      onProgress(`全文共 ${chunks.length} 个片段 (划分为 ${totalParts} 部分)，启动并发精读 (并发度: ${concurrency})...`);
+    }
+
+    const partialSummaries: string[] = new Array(tasks.length);
+    let completedCount = 0;
+
+    const processTaskWithRetry = async (task: PartTask): Promise<void> => {
+      const partPrompt = `请对以下论文片段（第 ${task.partIndex}/${task.totalParts} 部分）提取核心要点（研究动机、方法细节、公式、实验结果或结论）：\n\n"""\n${task.groupChunks.join("\n\n")}\n"""`;
+
+      for (let attempt = 0; attempt <= 2; attempt++) {
+        try {
+          const partSummary = await AIClient.chat([
+            {
+              role: "system",
+              content: "你是一位专业学术研究助手，请精炼提取所给论文选段中的关键技术细节、实验数据和方法论要点。",
+            },
+            { role: "user", content: partPrompt },
+          ]);
+
+          partialSummaries[task.partIndex - 1] = `【第 ${task.partIndex} 部分要点】:\n${partSummary}`;
+          completedCount++;
+          if (onProgress) {
+            onProgress(`正在精读论文 (${completedCount}/${tasks.length} 部分完成，并发度: ${concurrency})...`);
+          }
+          return;
+        } catch (err) {
+          dump(`[PaperPilot Digest] Attempt ${attempt + 1} failed for part ${task.partIndex}: ${err}\n`);
+          if (attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+          }
+        }
+      }
+
+      partialSummaries[task.partIndex - 1] = `【第 ${task.partIndex} 部分要点】:\n(提炼网络超时，参考片段摘要: ${task.groupChunks[0]?.slice(0, 150)}...)`;
+      completedCount++;
+      if (onProgress) {
+        onProgress(`正在精读论文 (${completedCount}/${tasks.length} 部分完成，并发度: ${concurrency})...`);
+      }
+    };
+
+    let taskCursor = 0;
+    const worker = async () => {
+      while (taskCursor < tasks.length) {
+        const currentTask = tasks[taskCursor++];
+        await processTaskWithRetry(currentTask);
+      }
+    };
+
+    const workerCount = Math.min(concurrency, tasks.length);
+    const workers = Array.from({ length: workerCount }, () => worker());
+    await Promise.all(workers);
 
     // Final synthesis
     if (onProgress) onProgress("正在将各部分要点综合生成最终 9 大模块速读报告...");

@@ -26,6 +26,25 @@ export interface ChatMessage {
   selectedQuote?: string;
 }
 
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: number;
+  lastUpdated: number;
+  messages: ChatMessage[];
+}
+
+export interface PDFChatHistory {
+  schemaVersion: number;
+  storageKey: string;
+  attachmentID?: number;
+  itemKey?: string;
+  title: string;
+  activeSessionId: string;
+  sessions: ChatSession[];
+  lastUpdated: number;
+}
+
 export interface PaperHistory {
   itemKey: string;
   title: string;

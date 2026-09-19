@@ -149,9 +149,8 @@ export class SidebarPanel {
     const win = doc.defaultView;
     const MozXULElement =
       win?.MozXULElement ||
-      (typeof MozXULElement !== "undefined"
-        ? MozXULElement
-        : typeof Zotero !== "undefined" && (Zotero as any).getMainWindow?.()?.MozXULElement);
+      (globalThis as any).MozXULElement ||
+      (typeof Zotero !== "undefined" && (Zotero as any).getMainWindow?.()?.MozXULElement);
 
     const markup = `
 <html:div
@@ -645,21 +644,6 @@ export class SidebarPanel {
         this.chatView.render([]);
       }
     });
-
-    // EventBus fallback listeners (if active)
-    EventBus.on("action:interpret", (data: { text: string }) => {
-      this.switchTab("chat");
-      const domainSelect = this.container.querySelector("#pp-domain-select") as HTMLSelectElement;
-      const domain = (domainSelect ? domainSelect.value : "general") as DomainType;
-      this.handleInterpret(data.text, domain);
-    });
-
-    EventBus.on("action:ask", (data: { quote: string }) => {
-      this.switchTab("chat");
-      this.setQuote(data.quote);
-      const inputEl = this.container.querySelector("#pp-chat-input") as HTMLTextAreaElement;
-      inputEl?.focus();
-    });
   }
 
   private switchTab(tabName: string): void {
@@ -764,9 +748,15 @@ export class SidebarPanel {
       });
 
       aiMsg.content = fullResponse;
-      this.chatView.finishStreamingMessage(aiMsgId, fullResponse);
       session.lastUpdated = Date.now();
       await StorageManager.savePDFHistory(this.pdfHistory);
+
+      try {
+        this.chatView.finishStreamingMessage(aiMsgId, fullResponse);
+      } catch (renderErr) {
+        dump(`[PaperPilot] finishStreamingMessage UI error: ${renderErr}\n`);
+        this.chatView.renderPlainTextFallback(aiMsgId, fullResponse);
+      }
     } catch (e: any) {
       aiMsg.content = `❌ 出错: ${e.message || e}`;
       this.chatView.updateStreamingMessage(aiMsgId, aiMsg.content);
@@ -815,9 +805,15 @@ export class SidebarPanel {
       });
 
       aiMsg.content = fullResponse;
-      this.chatView.finishStreamingMessage(aiMsgId, fullResponse);
       session.lastUpdated = Date.now();
       await StorageManager.savePDFHistory(this.pdfHistory);
+
+      try {
+        this.chatView.finishStreamingMessage(aiMsgId, fullResponse);
+      } catch (renderErr) {
+        dump(`[PaperPilot] finishStreamingMessage UI error: ${renderErr}\n`);
+        this.chatView.renderPlainTextFallback(aiMsgId, fullResponse);
+      }
     } catch (e: any) {
       aiMsg.content = `❌ 解读失败: ${e.message || e}`;
       this.chatView.updateStreamingMessage(aiMsgId, aiMsg.content);
@@ -876,9 +872,15 @@ export class SidebarPanel {
       });
 
       aiMsg.content = fullResponse;
-      this.chatView.finishStreamingMessage(aiMsgId, fullResponse);
       session.lastUpdated = Date.now();
       await StorageManager.savePDFHistory(this.pdfHistory);
+
+      try {
+        this.chatView.finishStreamingMessage(aiMsgId, fullResponse);
+      } catch (renderErr) {
+        dump(`[PaperPilot] finishStreamingMessage UI error: ${renderErr}\n`);
+        this.chatView.renderPlainTextFallback(aiMsgId, fullResponse);
+      }
     } catch (e: any) {
       aiMsg.content = `❌ 生成报告失败: ${e.message || e}`;
       this.chatView.updateStreamingMessage(aiMsgId, aiMsg.content);

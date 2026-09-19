@@ -7,7 +7,7 @@
     "compile": "node esbuild.js",
     "build": "node esbuild.js --package",
     "package": "node esbuild.js --package",
-    "test": "node test/verify-architecture.js && node test/test-math-rendering.js && node test/test-concurrency-digest.js && node test/test-context-strategy.js && node test/test-pdf-history-isolation.js && node test/test-selection-button-state.js"
+    "test": "node test/verify-architecture.js && node test/test-math-rendering.js && node test/test-markdown-math-production.js && node test/test-session-render-regression.js && node test/test-runtime-global-safety.js && node test/test-note-renderer-production.js && node test/test-controller-reader-resolution.js && node test/test-concurrency-digest.js && node test/test-context-strategy.js && node test/test-pdf-history-isolation.js && node test/test-selection-button-state.js"
   },
   "keywords": [
     "zotero",

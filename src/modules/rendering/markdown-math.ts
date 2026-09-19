@@ -4,6 +4,10 @@ import katex from "katex";
 export const HTML_NS = "http://www.w3.org/1999/xhtml";
 export const MATHML_NS = "http://www.w3.org/1998/Math/MathML";
 
+// DOM nodeType standard numeric constants to avoid global Node dependency in Zotero sandbox
+const ELEMENT_NODE = 1;
+const TEXT_NODE = 3;
+
 export interface MathToken {
   id: string;
   raw: string;
@@ -25,6 +29,16 @@ export class MarkdownMathRenderer {
   }
 
   /**
+   * Generates pure alphanumeric tokens safe from MarkdownIt parsing,
+   * HTML entity conversion, or prose collisions.
+   */
+  static makeMathToken(index: number, block: boolean): string {
+    return block
+      ? `PAPERPILOTMATHTOKENBLOCK${index}END`
+      : `PAPERPILOTMATHTOKENINLINE${index}END`;
+  }
+
+  /**
    * Detects whether text inside an untyped code block represents a mathematical formula.
    */
   static looksLikeMath(text: string): boolean {
@@ -42,6 +56,8 @@ export class MarkdownMathRenderer {
       /\bfunction\s*\w*\s*\(/,
       /\breturn\s+[;a-zA-Z0-9]/,
       /\bconsole\.(log|error|warn)\(/,
+      /\bnpm\s+(run|test|build|install)/,
+      /\b[a-zA-Z_]\w*\s*=\s*[a-zA-Z_]\w*\.[a-zA-Z_]\w*\(/,
       /\bclass\s+\w+\s*[{:]/,
       /\bpublic\s+\w+/,
       /\bprivate\s+\w+/,
@@ -52,7 +68,7 @@ export class MarkdownMathRenderer {
       /\/\*[\s\S]*?\*\//,
       /<!DOCTYPE/i,
       /<html/i,
-      /^\s*\{[\s\S]*"(id|name|type|status)":/m,
+      /^\s*\{[\s\S]*"[a-zA-Z0-9_]+":/m,
     ];
 
     for (const pattern of codeSignatures) {
@@ -61,9 +77,9 @@ export class MarkdownMathRenderer {
       }
     }
 
-    // Strong LaTeX keywords and math symbols
+    // Strong LaTeX keywords and mathematical notations
     const latexCommands = [
-      /\\(frac|sum|int|iint|iiint|oint|prod|sqrt|hat|bar|tilde|vec|mathbf|mathcal|mathbb|mathrm|text|operatorname)/,
+      /\\(frac|sum|int|iint|iiint|oint|prod|sqrt|hat|bar|tilde|vec|dot|ddot|mathbf|mathcal|mathbb|mathrm|text|operatorname)/,
       /\\(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega)/i,
       /\\(Phi|Theta|Lambda|Sigma|Omega|Delta|Gamma|Psi)/,
       /\\(partial|nabla|times|cdot|circ|pm|mp|in|notin|subset|subseteq|cup|cap|lor|land|forall|exists)/,
@@ -72,20 +88,19 @@ export class MarkdownMathRenderer {
       /\\begin\{(matrix|pmatrix|bmatrix|vmatrix|Vmatrix|aligned|align|gather|cases|split)\}/,
       /\\(left|right)[(\[{|.]/,
       /\\[,;:! ]/,
-      /\b[a-zA-Z]\s*\([kntx]\)\s*=\s*[a-zA-Z0-9(]/,
-      /[a-zA-Z]_\{?[a-zA-Z0-9+\-*|]+\}?/,
-      /[a-zA-Z]\^\{?[a-zA-Z0-9+\-*|]+\}?/,
-      /=\s*[A-Z]\([knt]\)[a-zA-Z0-9(]/,
+      /\b[a-zA-Z]\s*\([a-zA-Z0-9+\-*|,\s]+\)\s*=\s*[a-zA-Z0-9+\-*|(\s]/,
+      /[a-zA-Z]_\{?[a-zA-Z0-9+\-*|,\s]+\}?/,
+      /[a-zA-Z]\^\{?[a-zA-Z0-9+\-*|,\s]+\}?/,
+      /\bE\s*=\s*mc\^2\b/i,
     ];
 
-    let matchCount = 0;
     for (const cmd of latexCommands) {
       if (cmd.test(trimmed)) {
-        matchCount++;
+        return true;
       }
     }
 
-    return matchCount >= 1;
+    return false;
   }
 
   /**
@@ -134,7 +149,7 @@ export class MarkdownMathRenderer {
   }
 
   /**
-   * Tokenizes all math blocks and inline formulas into placeholders.
+   * Tokenizes all math blocks and inline formulas into pure alphanumeric placeholders.
    */
   static tokenizeMath(text: string): { tokenizedText: string; tokens: MathToken[] } {
     const tokens: MathToken[] = [];
@@ -142,28 +157,28 @@ export class MarkdownMathRenderer {
 
     // 1. Block math: $$ ... $$
     let tokenized = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, tex) => {
-      const id = `__PPMATH_BLOCK_${tokenIndex++}__`;
+      const id = this.makeMathToken(tokenIndex++, true);
       tokens.push({ id, raw: tex, block: true });
       return id;
     });
 
     // 2. Block math: \[ ... \]
     tokenized = tokenized.replace(/\\\[([\s\S]*?)\\\]/g, (_, tex) => {
-      const id = `__PPMATH_BLOCK_${tokenIndex++}__`;
+      const id = this.makeMathToken(tokenIndex++, true);
       tokens.push({ id, raw: tex, block: true });
       return id;
     });
 
     // 3. Inline math: \( ... \)
     tokenized = tokenized.replace(/\\\(([\s\S]*?)\\\)/g, (_, tex) => {
-      const id = `__PPMATH_INLINE_${tokenIndex++}__`;
+      const id = this.makeMathToken(tokenIndex++, false);
       tokens.push({ id, raw: tex, block: false });
       return id;
     });
 
     // 4. Inline math: $ ... $ (excluding escaped \$)
     tokenized = tokenized.replace(/(?<!\\)\$((?:[^\$\n\\]|\\.)+)\$/g, (_, tex) => {
-      const id = `__PPMATH_INLINE_${tokenIndex++}__`;
+      const id = this.makeMathToken(tokenIndex++, false);
       tokens.push({ id, raw: tex, block: false });
       return id;
     });
@@ -208,12 +223,23 @@ export class MarkdownMathRenderer {
 
   /**
    * Converts HTML string to a safe DocumentFragment under the target document's XHTML namespace.
+   * Uses ownerDocument context and avoids any dependency on global Node or global DOMParser.
    */
   static renderForSidebar(markdown: string, ownerDocument: Document): DocumentFragment {
     const rawHtml = this.renderForSidebarMarkup(markdown);
     const fragment = ownerDocument.createDocumentFragment();
 
-    const parser = new DOMParser();
+    const win = ownerDocument.defaultView;
+    const DOMParserCtor =
+      win?.DOMParser ||
+      (typeof DOMParser !== "undefined" ? DOMParser : null) ||
+      (globalThis as any).DOMParser;
+
+    if (!DOMParserCtor) {
+      throw new Error("DOMParser unavailable in target Zotero document window");
+    }
+
+    const parser = new DOMParserCtor();
     const doc = parser.parseFromString(
       `<!DOCTYPE html><html><body><div id="wrapper">${rawHtml}</div></body></html>`,
       "text/html"
@@ -222,11 +248,11 @@ export class MarkdownMathRenderer {
     const wrapper = doc.getElementById("wrapper");
     if (!wrapper) return fragment;
 
-    const convertNode = (node: Node): Node | null => {
-      if (node.nodeType === Node.TEXT_NODE) {
+    const convertNode = (node: any): Node | null => {
+      if (node.nodeType === TEXT_NODE) {
         return ownerDocument.createTextNode(node.textContent || "");
       }
-      if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.nodeType === ELEMENT_NODE) {
         const el = node as Element;
         const isMathML =
           el.namespaceURI === MATHML_NS ||
@@ -261,15 +287,15 @@ export class MarkdownMathRenderer {
   }
 
   /**
-   * Renders Markdown + Zotero Native Math markup for Zotero Note Editor.
+   * Renders Markdown + Zotero Native Math markup for Zotero Note Editor Body.
+   * Does NOT wrap in <div data-schema-version="9"> (NoteExporter provides the single outer schema root).
    * Format:
    * - Inline: <span class="math">$...$</span>
    * - Block: <pre class="math">$$...$$</pre>
    * - Titles: <h1>, <h2>, etc.
-   * - Schema: <div data-schema-version="9">...</div>
    */
-  static renderForZoteroNote(markdown: string): string {
-    if (!markdown) return '<div data-schema-version="9"></div>';
+  static renderForZoteroNoteBody(markdown: string): string {
+    if (!markdown) return "";
     const normalized = this.normalizeModelMarkdown(markdown);
     const { tokenizedText, tokens } = this.tokenizeMath(normalized);
 
@@ -286,7 +312,14 @@ export class MarkdownMathRenderer {
       html = html.replace(token.id, () => mathHtml);
     }
 
-    return `<div data-schema-version="9">\n${html}\n</div>`;
+    return html;
+  }
+
+  /**
+   * Standalone helper wrapping renderForZoteroNoteBody in data-schema-version="9".
+   */
+  static renderForZoteroNote(markdown: string): string {
+    return `<div data-schema-version="9">\n${this.renderForZoteroNoteBody(markdown)}\n</div>`;
   }
 
   static escapeHtml(str: string): string {

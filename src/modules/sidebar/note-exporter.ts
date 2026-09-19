@@ -22,11 +22,11 @@ export class NoteExporter {
           if (msg.selectedQuote) {
             html += `<blockquote><em>引用选段: ${this.escape(msg.selectedQuote)}</em></blockquote>`;
           }
-          html += `<p>${this.escape(msg.content)}</p>`;
+          html += `<div>${MarkdownMathRenderer.renderForZoteroNoteBody(msg.content)}</div>`;
         } else if (msg.role === "assistant") {
           const domainBadge = msg.domain ? ` [${this.escape(msg.domain)}]` : "";
           html += `<p><strong>🤖 AI 回答${domainBadge}:</strong></p>`;
-          html += `<div>${MarkdownMathRenderer.renderForZoteroNote(msg.content)}</div><hr/>`;
+          html += `<div>${MarkdownMathRenderer.renderForZoteroNoteBody(msg.content)}</div><hr/>`;
         }
       }
 

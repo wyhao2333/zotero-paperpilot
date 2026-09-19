@@ -173,15 +173,20 @@ export class PreferenceManager {
       ...this.cachedPrefs,
       ...newPrefs,
     };
+    let savedToZotero = false;
     try {
       if (typeof Zotero !== "undefined" && Zotero.Prefs) {
         Zotero.Prefs.set(this.PREF_KEY, JSON.stringify(this.cachedPrefs), true);
+        savedToZotero = true;
         dump("[PaperPilot] PreferenceManager saved prefs to Zotero.Prefs\n");
       }
     } catch (e) {
       dump(`[PaperPilot] Failed to save preferences: ${e}\n`);
     }
-    EventBus.emit("preferences:changed");
+    // Avoid double-emitting preferences:changed when Zotero.Prefs observer is active
+    if (!this.observerSymbol || !savedToZotero) {
+      EventBus.emit("preferences:changed");
+    }
   }
 
   static getActiveAIConfig(): AIProviderConfig {

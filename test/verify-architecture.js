@@ -287,6 +287,27 @@ async function runStaticValidation() {
   assert(prefsJs.includes("aiTranslationUseContext: parsed.aiTranslationUseContext"), "preferences.js must preserve aiTranslationUseContext");
   console.log("✅ Check 21 PASS: Multi-session management, settings sync, and preference preservation verified.");
 
+  // Check 22: Math Renderer Token Safety, Session Recovery & Runtime Compatibility
+  console.log("\n[Check 22] Verifying Math Renderer, Session Recovery & Runtime Compatibility...");
+  assert(markdownMathTs.includes("makeMathToken"), "markdown-math.ts must use makeMathToken for pure alphanumeric tokens");
+  assert(!markdownMathTs.includes("__PPMATH"), "markdown-math.ts must NOT use __PPMATH tokens (vulnerable to markdown bold parsing)");
+  assert(markdownMathTs.includes("const TEXT_NODE = 3"), "markdown-math.ts must define numeric TEXT_NODE constant");
+  assert(markdownMathTs.includes("const ELEMENT_NODE = 1"), "markdown-math.ts must define numeric ELEMENT_NODE constant");
+  assert(markdownMathTs.includes("renderForZoteroNoteBody"), "markdown-math.ts must export renderForZoteroNoteBody");
+  assert(noteExporterTs.includes("renderForZoteroNoteBody"), "note-exporter.ts must use renderForZoteroNoteBody");
+  assert(chatViewTs.includes("renderMarkdownInto"), "chat-view.ts must implement renderMarkdownInto");
+  assert(chatViewTs.includes("renderPlainTextFallback"), "chat-view.ts must implement renderPlainTextFallback");
+  assert(controllerTs.includes("resolveReaderTabID"), "controller.ts must implement resolveReaderTabID");
+  assert(controllerTs.includes("active.tabID === tabID"), "controller.ts must guard against cross-PDF context crosstalk");
+
+  console.log("  Executing sub-suites...");
+  require("./test-markdown-math-production.js");
+  require("./test-session-render-regression.js");
+  require("./test-runtime-global-safety.js");
+  require("./test-note-renderer-production.js");
+  require("./test-controller-reader-resolution.js");
+  console.log("✅ Check 22 PASS: Math renderer token safety, session recovery, note schema isolation, and runtime compatibility verified.");
+
   console.log("\n==================================================");
   console.log("STATIC CHECK PASS (Requires manual Zotero GUI verification)");
 }

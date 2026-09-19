@@ -6,9 +6,8 @@ function parseMarkupToFragment(doc: Document, markup: string): DocumentFragment 
   const win = doc.defaultView;
   const MozXULElement =
     win?.MozXULElement ||
-    (typeof MozXULElement !== "undefined"
-      ? MozXULElement
-      : typeof Zotero !== "undefined" && (Zotero as any).getMainWindow?.()?.MozXULElement);
+    (globalThis as any).MozXULElement ||
+    (typeof Zotero !== "undefined" && (Zotero as any).getMainWindow?.()?.MozXULElement);
 
   if (MozXULElement && typeof MozXULElement.parseXULToFragment === "function") {
     let frag = MozXULElement.parseXULToFragment(markup);
@@ -88,7 +87,7 @@ export class ChatView {
       if (msg.domain) {
         aiDomainMarkup = `<html:div><html:span class="paperpilot-domain-badge">${this.escape(msg.domain)}</html:span></html:div>`;
       }
-      aiContentMarkup = `<html:div class="msg-content">${this.renderMarkdown(msg.content)}</html:div>`;
+      aiContentMarkup = `<html:div class="msg-content"></html:div>`;
       aiActionsMarkup = `<html:div style="display:flex; justify-content:flex-end; margin-top:4px;">
         <html:button class="paperpilot-btn btn-copy-msg" style="font-size:11px; padding:2px 6px;">📋 复制</html:button>
       </html:div>`;
@@ -131,6 +130,19 @@ export class ChatView {
     }
 
     this.container.appendChild(fragment);
+
+    if (msg.role !== "user") {
+      const contentEl = el.querySelector(".msg-content") as HTMLElement;
+      if (contentEl) {
+        const poisonedRegex = /^❌[\s\S]*?(?:Node|DOMParser)\s+is\s+not\s+defined/i;
+        if (poisonedRegex.test(msg.content)) {
+          contentEl.textContent = "⚠️ 历史会话包含早期版本的渲染异常提示，但底层会话与数据已安全恢复。您可以继续在此会话中提问。";
+        } else {
+          this.renderMarkdownInto(contentEl, msg.content);
+        }
+      }
+    }
+
     if (scroll) {
       this.scrollToBottom();
     }
@@ -199,16 +211,35 @@ export class ChatView {
     }
   }
 
+  renderPlainTextFallback(msgId: string, text: string): void {
+    this.streamingTextNodes.delete(msgId);
+    const el = this.container.querySelector(`#msg-${msgId}`);
+    if (el) {
+      const contentEl = el.querySelector(".msg-content") as HTMLElement;
+      if (contentEl) {
+        contentEl.textContent = text;
+      }
+    }
+    this.scrollToBottom();
+  }
+
   private renderMarkdownInto(targetEl: HTMLElement, md: string): void {
     const doc = targetEl.ownerDocument;
-    const frag = MarkdownMathRenderer.renderForSidebar(md, doc);
-    if (typeof targetEl.replaceChildren === "function") {
-      targetEl.replaceChildren(frag);
-    } else {
-      while (targetEl.firstChild) {
-        targetEl.removeChild(targetEl.firstChild);
+    try {
+      const frag = MarkdownMathRenderer.renderForSidebar(md, doc);
+      if (typeof targetEl.replaceChildren === "function") {
+        targetEl.replaceChildren(frag);
+      } else {
+        while (targetEl.firstChild) {
+          targetEl.removeChild(targetEl.firstChild);
+        }
+        targetEl.appendChild(frag);
       }
-      targetEl.appendChild(frag);
+    } catch (err: any) {
+      if (typeof dump !== "undefined") {
+        dump(`[PaperPilot Markdown] render failed: ${err?.message || err}, falling back to plaintext\n`);
+      }
+      targetEl.textContent = md;
     }
   }
 

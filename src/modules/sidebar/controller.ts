@@ -110,6 +110,17 @@ export class PaperPilotSidebarController {
     return null;
   }
 
+  static resolveReaderTabID(win: any, reader?: any): string {
+    if (reader) {
+      if (reader._tabID) return String(reader._tabID);
+      if (reader.tabID) return String(reader.tabID);
+    }
+    if (win?.Zotero_Tabs?.selectedID) {
+      return String(win.Zotero_Tabs.selectedID);
+    }
+    return "";
+  }
+
   /**
    * Dispatches an "ask" action with strict end-to-end verification.
    * Directly locates the actual Reader itemDetails and PaperPilot section mount.
@@ -125,7 +136,7 @@ export class PaperPilotSidebarController {
       throw new Error("Zotero main window not found");
     }
 
-    const tabID = win.Zotero_Tabs?.selectedID || (options.reader?._tabID ? String(options.reader._tabID) : "");
+    const tabID = this.resolveReaderTabID(win, options.reader);
     dump(`[PaperPilot Ask] selected tabID=${tabID}\n`);
 
     const action: PendingAction = {
@@ -239,7 +250,7 @@ export class PaperPilotSidebarController {
       throw new Error("Zotero main window not found");
     }
 
-    const tabID = win.Zotero_Tabs?.selectedID || (options.reader?._tabID ? String(options.reader._tabID) : "");
+    const tabID = this.resolveReaderTabID(win, options.reader);
     const action: PendingAction = {
       type: "interpret",
       selectedText: options.selectedText,
@@ -313,7 +324,10 @@ export class PaperPilotSidebarController {
         if (itemDetails) return itemDetails;
       }
       if (win.ZoteroContextPane?.context?._activeItemContext) {
-        return win.ZoteroContextPane.context._activeItemContext;
+        const active = win.ZoteroContextPane.context._activeItemContext;
+        if (!tabID || !active.tabID || active.tabID === tabID) {
+          return active;
+        }
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
     }

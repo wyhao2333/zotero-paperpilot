@@ -309,6 +309,9 @@ async function runStaticValidation() {
   require("./test-release-manifest.js");
   require("./test-sidebar-responsive.js");
   require("./test-math-prompt-consistency.js");
+  require("./test-digest-responsive-layout.js");
+  require("./test-floating-bar-rendering.js");
+  require("./test-floating-bar-dom-safety.js");
 
   // Check 23: Release Gate & Metadata Verification (Zotero 10 Only, Valid update_url, updates.json, MIT License)
   console.log("\n[Check 23] Verifying Release Metadata & Zotero 10 Compliance...");

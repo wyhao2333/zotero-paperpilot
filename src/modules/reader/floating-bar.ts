@@ -6,6 +6,7 @@ import { PromptManager } from "../ai/prompts";
 import { AIClient } from "../ai/client";
 import { PaperPilotSidebarController } from "../sidebar/controller";
 import { PaperContextService } from "./paper-context";
+import { MarkdownMathRenderer } from "../rendering/markdown-math";
 
 export class FloatingBarManager {
   private static activeFloatingBar: HTMLElement | null = null;
@@ -188,6 +189,8 @@ export class FloatingBarManager {
         }
       };
 
+      let latestResultText = "";
+
       const titleEl = resultCard.querySelector(`#pp-res-title-${instanceID}`) as HTMLElement;
       const bodyEl = resultCard.querySelector(`#pp-res-body-${instanceID}`) as HTMLElement;
       const copyBtn = resultCard.querySelector(`#pp-res-copy-${instanceID}`) as HTMLButtonElement;
@@ -200,7 +203,7 @@ export class FloatingBarManager {
 
       copyBtn?.addEventListener("click", (e) => {
         e.stopPropagation();
-        const content = bodyEl?.innerText || bodyEl?.textContent || "";
+        const content = latestResultText || bodyEl?.innerText || bodyEl?.textContent || "";
         copyToClipboard(content, copyBtn);
       });
 
@@ -210,8 +213,13 @@ export class FloatingBarManager {
         e.preventDefault();
         setActiveButton("translate");
         resultCard.style.display = "block";
+        latestResultText = "";
         if (titleEl) titleEl.textContent = "PaperPilot · 划词翻译";
-        if (bodyEl) bodyEl.innerHTML = "<em>正在翻译...</em>";
+        if (bodyEl) {
+          const em = doc.createElement("em");
+          em.textContent = "正在翻译...";
+          bodyEl.replaceChildren(em);
+        }
 
         try {
           const attachmentID = await PaperContextService.resolveAttachmentID(reader);
@@ -225,21 +233,32 @@ export class FloatingBarManager {
             context: context || undefined,
             onProgress: (progressMsg, partialText) => {
               if (bodyEl) {
-                const preview = partialText
-                  ? `<div style="opacity:0.85; margin-top:4px;">${partialText.replace(/\n/g, "<br/>")}</div>`
-                  : "";
-                bodyEl.innerHTML = `
-                  <div style="font-size:11px; color:#2563eb; font-weight:500;">⏳ ${progressMsg}</div>
-                  ${preview}
-                `;
+                const statusDiv = doc.createElement("div");
+                statusDiv.style.cssText = "font-size:11px; color:#2563eb; font-weight:500;";
+                statusDiv.textContent = `⏳ ${progressMsg}`;
+                bodyEl.replaceChildren(statusDiv);
+
+                if (partialText) {
+                  const previewDiv = doc.createElement("div");
+                  previewDiv.style.cssText = "opacity:0.85; margin-top:4px; white-space:pre-wrap;";
+                  previewDiv.textContent = partialText;
+                  bodyEl.appendChild(previewDiv);
+                }
               }
             },
           });
-          if (bodyEl) bodyEl.textContent = translated;
+          latestResultText = translated;
+          if (bodyEl) {
+            bodyEl.textContent = translated;
+          }
           EventBus.emit("action:translated", { source: cleanText, translated });
         } catch (err: any) {
+          latestResultText = "";
           if (bodyEl) {
-            bodyEl.innerHTML = `<span style="color:#dc2626;">❌ 翻译失败: ${err.message || err}</span>`;
+            const errSpan = doc.createElement("span");
+            errSpan.style.color = "#dc2626";
+            errSpan.textContent = `❌ 翻译失败: ${err?.message || err}`;
+            bodyEl.replaceChildren(errSpan);
           }
         }
       });
@@ -250,17 +269,25 @@ export class FloatingBarManager {
         e.preventDefault();
         setActiveButton("interpret");
         resultCard.style.display = "block";
+        latestResultText = "";
         if (titleEl) titleEl.textContent = "PaperPilot · 学术解读";
-        if (bodyEl) bodyEl.innerHTML = "<em>正在进行学术解读...</em>";
+        if (bodyEl) {
+          const em = doc.createElement("em");
+          em.textContent = "正在进行学术解读...";
+          bodyEl.replaceChildren(em);
+        }
 
         const config = PreferenceManager.getActiveAIConfig();
         if (!config || (!config.apiKey && config.id !== "ollama")) {
           if (bodyEl) {
-            bodyEl.innerHTML = `
-              <div style="color:#b45309; line-height:1.5;">
-                <strong>未配置 AI API Key</strong><br/>
-                请前往 Zotero【设置】→【PaperPilot】中配置服务商与 API Key。
-              </div>`;
+            const warnDiv = doc.createElement("div");
+            warnDiv.style.cssText = "color:#b45309; line-height:1.5;";
+            const strong = doc.createElement("strong");
+            strong.textContent = "未配置 AI API Key";
+            warnDiv.appendChild(strong);
+            warnDiv.appendChild(doc.createElement("br"));
+            warnDiv.append(doc.createTextNode("请前往 Zotero【设置】→【PaperPilot】中配置服务商与 API Key。"));
+            bodyEl.replaceChildren(warnDiv);
           }
           return;
         }
@@ -282,13 +309,24 @@ export class FloatingBarManager {
               }
             },
           });
+          latestResultText = full;
           if (bodyEl && full) {
-            bodyEl.textContent = full;
+            try {
+              const fragment = MarkdownMathRenderer.renderForSidebar(full, doc);
+              bodyEl.replaceChildren(fragment);
+            } catch (renderErr) {
+              dump(`[PaperPilot] Error rendering floating bar markdown: ${renderErr}\n`);
+              bodyEl.textContent = full;
+            }
           }
           EventBus.emit("action:interpreted", { source: cleanText, text: full });
         } catch (err: any) {
+          latestResultText = "";
           if (bodyEl) {
-            bodyEl.innerHTML = `<span style="color:#dc2626;">❌ 解读失败: ${err.message || err}</span>`;
+            const errSpan = doc.createElement("span");
+            errSpan.style.color = "#dc2626";
+            errSpan.textContent = `❌ 解读失败: ${err?.message || err}`;
+            bodyEl.replaceChildren(errSpan);
           }
         }
       });
@@ -318,12 +356,15 @@ export class FloatingBarManager {
             throw new Error("Controller openAsk returned false");
           }
         } catch (err: any) {
-          dump(`[PaperPilot] ERROR in ask click: ${err.message || err}\n`);
+          dump(`[PaperPilot] ERROR in ask click: ${err?.message || err}\n`);
           btnAsk.textContent = "❓ 提问";
           resultCard.style.display = "block";
           if (titleEl) titleEl.textContent = "PaperPilot · 提问状态";
           if (bodyEl) {
-            bodyEl.innerHTML = `<span style="color:#dc2626;">❌ 无法打开 PaperPilot 伴读侧栏，请查看 Zotero Debug Output。</span>`;
+            const errSpan = doc.createElement("span");
+            errSpan.style.color = "#dc2626";
+            errSpan.textContent = "❌ 无法打开 PaperPilot 伴读侧栏，请查看 Zotero Debug Output。";
+            bodyEl.replaceChildren(errSpan);
           }
         }
       });

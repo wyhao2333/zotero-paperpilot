@@ -229,7 +229,7 @@ export class SidebarPanel {
     <html:div class="paperpilot-input-box" style="padding: 6px 0 0 0;">
       <html:textarea class="paperpilot-textarea" id="pp-chat-input" placeholder="输入问题或选中论文内容追问 (Enter 发送, Shift+Enter 换行)..."></html:textarea>
       <html:div class="paperpilot-toolbar-row">
-        <html:span style="font-size:11px; color:var(--pp-text-muted);">结合 PDF 全文推理</html:span>
+        <html:span style="font-size:11px; color:var(--pp-text-muted);">结合 PDF 上下文</html:span>
         <html:button class="paperpilot-btn primary" id="pp-btn-send" style="padding:4px 12px;">发送</html:button>
       </html:div>
     </html:div>

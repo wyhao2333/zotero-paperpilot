@@ -359,13 +359,86 @@
 }
 
 .paperpilot-msg.ai {
-  align-self: flex-start;
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   background: var(--pp-bg-secondary);
   border: 1px solid var(--pp-border);
   padding: var(--pp-pad) 12px;
   border-radius: 12px 12px 12px 2px;
-  width: auto;
+}
+
+.paperpilot-msg.ai .msg-content,
+.paperpilot-msg-content {
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* All Markdown block descendants constrained to 100% message width */
+.paperpilot-msg.ai .msg-content > *,
+.paperpilot-msg.ai .msg-content p,
+.paperpilot-msg.ai .msg-content h1,
+.paperpilot-msg.ai .msg-content h2,
+.paperpilot-msg.ai .msg-content h3,
+.paperpilot-msg.ai .msg-content h4,
+.paperpilot-msg.ai .msg-content ul,
+.paperpilot-msg.ai .msg-content ol,
+.paperpilot-msg.ai .msg-content li,
+.paperpilot-msg.ai .msg-content blockquote {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Headings and paragraphs word-wrap defensively */
+.paperpilot-msg.ai .msg-content h1,
+.paperpilot-msg.ai .msg-content h2,
+.paperpilot-msg.ai .msg-content h3,
+.paperpilot-msg.ai .msg-content h4,
+.paperpilot-msg.ai .msg-content p {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Compact list indentation to prevent nested list overflow */
+.paperpilot-msg.ai .msg-content ul,
+.paperpilot-msg.ai .msg-content ol {
+  margin-inline: 0;
+  padding-inline-start: 1.4em;
+}
+
+.paperpilot-msg.ai .msg-content li > ul,
+.paperpilot-msg.ai .msg-content li > ol {
+  padding-inline-start: 1.2em;
+}
+
+.paperpilot-sidebar.paperpilot-compact .paperpilot-msg.ai .msg-content ul,
+.paperpilot-sidebar.paperpilot-compact .paperpilot-msg.ai .msg-content ol {
+  padding-inline-start: 1.25em;
+}
+
+.paperpilot-sidebar.paperpilot-narrow .paperpilot-msg.ai .msg-content ul,
+.paperpilot-sidebar.paperpilot-narrow .paperpilot-msg.ai .msg-content ol {
+  padding-inline-start: 1.15em;
+}
+
+.paperpilot-msg.ai .msg-content li {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.paperpilot-msg.ai .msg-content blockquote {
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 0.8em;
+  border-left: 3px solid var(--pp-border);
 }
 
 .paperpilot-msg.ai pre:not(.paperpilot-math-block) {
@@ -374,6 +447,7 @@
   border-radius: 4px;
   max-width: 100%;
   overflow-x: auto;
+  box-sizing: border-box;
 }
 
 /* Math block and MathML responsiveness */
@@ -382,12 +456,14 @@
 .paperpilot-msg .katex,
 .paperpilot-msg .katex-display {
   max-width: 100%;
+  box-sizing: border-box;
 }
 
 .paperpilot-math-block,
 .paperpilot-msg .katex-display {
   overflow-x: auto;
   overflow-y: hidden;
+  box-sizing: border-box;
 }
 
 .paperpilot-sidebar.paperpilot-compact .paperpilot-math-block {
@@ -399,10 +475,13 @@
 }
 
 .paperpilot-msg table {
+  display: block;
   max-width: 100%;
   width: 100%;
+  overflow-x: auto;
   table-layout: auto;
   border-collapse: collapse;
+  box-sizing: border-box;
 }
 
 .paperpilot-input-box {

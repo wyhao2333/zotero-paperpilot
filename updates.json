@@ -1,0 +1,18 @@
+{
+  "addons": {
+    "paperpilot@zotero.org": {
+      "updates": [
+        {
+          "version": "1.0.1",
+          "update_link": "https://github.com/wyhao2333/zotero-paperpilot/releases/download/v1.0.1/paperpilot-1.0.1.xpi",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "10.0",
+              "strict_max_version": "10.0.*"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

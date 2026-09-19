@@ -306,13 +306,32 @@ async function runStaticValidation() {
   require("./test-runtime-global-safety.js");
   require("./test-note-renderer-production.js");
   require("./test-controller-reader-resolution.js");
-  // Check 23: Release Gate & Metadata Verification (Zotero 10 Only, No update_url, MIT License)
+  require("./test-release-manifest.js");
+
+  // Check 23: Release Gate & Metadata Verification (Zotero 10 Only, Valid update_url, updates.json, MIT License)
   console.log("\n[Check 23] Verifying Release Metadata & Zotero 10 Compliance...");
   const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf-8"));
   assert.strictEqual(manifest.version, "1.0.1", "manifest.json version must be 1.0.1");
+  assert.strictEqual(manifest.applications.zotero.id, "paperpilot@zotero.org", "id must be paperpilot@zotero.org");
   assert.strictEqual(manifest.applications.zotero.strict_min_version, "10.0", "strict_min_version must be 10.0");
-  assert.strictEqual(manifest.applications.zotero.strict_max_version, "10.*", "strict_max_version must be 10.*");
-  assert(!("update_url" in manifest.applications.zotero), "update_url must be removed for v1.0.1 release");
+  assert.strictEqual(manifest.applications.zotero.strict_max_version, "10.0.*", "strict_max_version must be 10.0.*");
+  assert(manifest.applications.zotero.update_url, "update_url must exist in manifest");
+  assert(typeof manifest.applications.zotero.update_url === "string" && manifest.applications.zotero.update_url.startsWith("https://"), "update_url must be HTTPS string");
+
+  assert(fs.existsSync("updates.json"), "updates.json must exist in root");
+  const updatesData = JSON.parse(fs.readFileSync("updates.json", "utf-8"));
+  assert(updatesData.addons && updatesData.addons["paperpilot@zotero.org"], "updates.json must define paperpilot@zotero.org");
+  const updateEntries = updatesData.addons["paperpilot@zotero.org"].updates;
+  assert(Array.isArray(updateEntries) && updateEntries.length > 0, "updates must be array");
+  const v1Update = updateEntries.find((u) => u.version === "1.0.1");
+  assert(v1Update, "updates.json must contain version 1.0.1 entry");
+  assert.strictEqual(
+    v1Update.update_link,
+    "https://github.com/wyhao2333/zotero-paperpilot/releases/download/v1.0.1/paperpilot-1.0.1.xpi",
+    "update_link must match release asset path"
+  );
+  assert.strictEqual(v1Update.applications?.zotero?.strict_min_version, "10.0", "updates.json strict_min_version must be 10.0");
+  assert.strictEqual(v1Update.applications?.zotero?.strict_max_version, "10.0.*", "updates.json strict_max_version must be 10.0.*");
 
   const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8"));
   assert.strictEqual(pkg.version, "1.0.1", "package.json version must be 1.0.1");
@@ -327,7 +346,7 @@ async function runStaticValidation() {
   const readme = fs.readFileSync("README.md", "utf-8");
   const forbiddenWordsRegex = /完美|毫秒级|零门槛|任意兼容|彻底摒弃|Zotero 7|7-10|7–10|zotero-7/;
   assert(!forbiddenWordsRegex.test(readme), "README.md must not contain hyperbolic words or Zotero 7 claims");
-  console.log("✅ Check 23 PASS: Release metadata, Zotero 10 compliance, MIT license, and lockfile verified.");
+  console.log("✅ Check 23 PASS: Release metadata, Zotero 10 compliance, updates.json, MIT license, and lockfile verified.");
 
   console.log("\n==================================================");
   console.log("STATIC CHECK PASS (Requires manual Zotero GUI verification)");

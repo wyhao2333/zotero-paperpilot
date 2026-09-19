@@ -410,6 +410,10 @@
 /* Compact list indentation to prevent nested list overflow */
 .paperpilot-msg.ai .msg-content ul,
 .paperpilot-msg.ai .msg-content ol {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   margin-inline: 0;
   padding-inline-start: 1.4em;
 }
@@ -430,8 +434,20 @@
 }
 
 .paperpilot-msg.ai .msg-content li {
-  overflow-wrap: anywhere;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
   word-break: break-word;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.paperpilot-msg.ai .msg-content li > p {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .paperpilot-msg.ai .msg-content blockquote {

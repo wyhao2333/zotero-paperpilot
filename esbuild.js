@@ -4,6 +4,7 @@ const path = require("path");
 const JSZip = require("jszip");
 
 const isPackage = process.argv.includes("--package");
+const BUILD_DATE = new Date("2026-09-19T00:00:00Z");
 
 function addDirectoryToZip(zip, folderPath, zipFolder) {
   if (!fs.existsSync(folderPath)) return;
@@ -14,7 +15,7 @@ function addDirectoryToZip(zip, folderPath, zipFolder) {
       const subZip = zipFolder.folder(item);
       addDirectoryToZip(zip, fullPath, subZip);
     } else {
-      zipFolder.file(item, fs.readFileSync(fullPath));
+      zipFolder.file(item, fs.readFileSync(fullPath), { date: BUILD_DATE });
     }
   }
 }
@@ -51,8 +52,8 @@ async function build() {
     const zip = new JSZip();
 
     // 1. Root files
-    zip.file("manifest.json", fs.readFileSync("manifest.json"));
-    zip.file("bootstrap.js", fs.readFileSync("bootstrap.js"));
+    zip.file("manifest.json", fs.readFileSync("manifest.json"), { date: BUILD_DATE });
+    zip.file("bootstrap.js", fs.readFileSync("bootstrap.js"), { date: BUILD_DATE });
 
     // 2. Add addon folder
     const addonFolder = zip.folder("addon");
@@ -62,6 +63,11 @@ async function build() {
     if (fs.existsSync("chrome")) {
       const chromeFolder = zip.folder("chrome");
       addDirectoryToZip(zip, "chrome", chromeFolder);
+    }
+
+    // Normalize all zip entry dates (including folders) for reproducible packaging
+    for (const f of Object.values(zip.files)) {
+      f.date = BUILD_DATE;
     }
 
     const content = await zip.generateAsync({

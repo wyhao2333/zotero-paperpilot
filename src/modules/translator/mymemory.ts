@@ -26,30 +26,35 @@ export class MyMemoryTranslator implements ITranslatorService {
       trimmed
     )}&langpair=${encodeURIComponent(langPair)}`;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-
     try {
-      const response = await fetch(url, {
-        method: "GET",
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+      dump("[PaperPilot] translation started (mymemory)\n");
+      let data: any;
 
-      if (!response.ok) {
-        throw new Error(`服务响应异常 (HTTP ${response.status})`);
+      if (typeof Zotero !== "undefined" && Zotero.HTTP?.request) {
+        const xhr = await Zotero.HTTP.request("GET", url, {
+          responseType: "json",
+          timeout: 6000,
+        });
+
+        if (xhr && xhr.status >= 200 && xhr.status < 300) {
+          data = xhr.response || (xhr.responseText ? JSON.parse(xhr.responseText) : null);
+        } else {
+          throw new Error(`HTTP ${xhr?.status || "unknown"}`);
+        }
+      } else {
+        const response = await fetch(url, { method: "GET" });
+        if (!response.ok) {
+          throw new Error(`服务响应异常 (HTTP ${response.status})`);
+        }
+        data = await response.json();
       }
 
-      const data = await response.json();
       if (data?.responseData?.translatedText) {
+        dump("[PaperPilot] translation completed (mymemory)\n");
         return data.responseData.translatedText;
       }
       throw new Error("接口返回数据格式异常");
     } catch (e: any) {
-      clearTimeout(timeoutId);
-      if (e.name === "AbortError") {
-        throw new Error("MyMemory 翻译网络请求超时 (6s)");
-      }
       throw new Error(`MyMemory 翻译失败: ${e.message || e}`);
     }
   }

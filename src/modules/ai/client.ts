@@ -13,11 +13,12 @@ export class AIClient {
       provider?: AIProviderConfig;
       temperature?: number;
       onChunk?: (delta: string, accumulated: string) => void;
-      signal?: AbortSignal;
     }
   ): Promise<string> {
     const config = options?.provider || PreferenceManager.getActiveAIConfig();
-    if (!config || !config.apiKey) {
+    const isOllama = config?.id === "ollama";
+
+    if (!config || (!config.apiKey && !isOllama)) {
       throw new Error(`[PaperPilot] 未配置 ${config?.name || "AI"} 的 API Key，请在插件设置中填写。`);
     }
 
@@ -27,70 +28,138 @@ export class AIClient {
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
+      ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
       ...(config.customHeaders || {}),
     };
 
     const isStream = typeof options?.onChunk === "function";
 
-    const body = {
-      model: config.model,
-      messages,
-      temperature: options?.temperature ?? config.temperature ?? 0.3,
-      stream: isStream,
+    // Fallback / standard non-streaming caller via Zotero.HTTP.request
+    const callNonStreaming = async (): Promise<string> => {
+      const body = JSON.stringify({
+        model: config.model,
+        messages,
+        temperature: options?.temperature ?? config.temperature ?? 0.3,
+        stream: false,
+      });
+
+      if (typeof Zotero !== "undefined" && Zotero.HTTP?.request) {
+        const xhr = await Zotero.HTTP.request("POST", endpoint, {
+          headers,
+          body,
+          responseType: "json",
+          timeout: 60000,
+        });
+
+        if (xhr && xhr.status >= 200 && xhr.status < 300) {
+          const json = xhr.response || (xhr.responseText ? JSON.parse(xhr.responseText) : null);
+          const content = json?.choices?.[0]?.message?.content || "";
+          if (options?.onChunk && content) {
+            options.onChunk(content, content);
+          }
+          return content;
+        } else {
+          const status = xhr?.status || "unknown";
+          let errorMsg = `HTTP ${status}`;
+          try {
+            const errJson = xhr?.response || (xhr?.responseText ? JSON.parse(xhr.responseText) : null);
+            if (errJson?.error?.message) {
+              errorMsg = errJson.error.message;
+            } else if (xhr?.responseText) {
+              errorMsg = xhr.responseText.slice(0, 200);
+            }
+          } catch (e) {}
+          throw new Error(`[${config.name}] API 请求失败 (${errorMsg})`);
+        }
+      } else {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers,
+          body,
+        });
+        if (!response.ok) {
+          const errText = await response.text().catch(() => "");
+          throw new Error(`[${config.name}] API 请求失败 (HTTP ${response.status}): ${errText.slice(0, 200)}`);
+        }
+        const json = await response.json();
+        const content = json?.choices?.[0]?.message?.content || "";
+        if (options?.onChunk && content) {
+          options.onChunk(content, content);
+        }
+        return content;
+      }
     };
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: options?.signal,
-    });
+    // Attempt streaming only if environment supports fetch, ReadableStream, and TextDecoder
+    const canAttemptStream =
+      isStream &&
+      typeof fetch === "function" &&
+      typeof TextDecoder !== "undefined";
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      throw new Error(`[${config.name}] API 请求失败 (HTTP ${response.status}): ${errorText || response.statusText}`);
+    if (!canAttemptStream) {
+      return await callNonStreaming();
     }
 
-    if (!isStream || !response.body) {
-      const json = await response.json();
-      return json.choices?.[0]?.message?.content || "";
-    }
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: config.model,
+          messages,
+          temperature: options?.temperature ?? config.temperature ?? 0.3,
+          stream: true,
+        }),
+      });
 
-    // Handle Streaming Response (SSE)
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let accumulated = "";
-    let buffer = "";
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(`[${config.name}] API 请求失败 (HTTP ${response.status}): ${errorText.slice(0, 200)}`);
+      }
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      if (!response.body || typeof (response.body as any).getReader !== "function") {
+        // Fallback to non-streaming if ReadableStream getReader is unavailable
+        dump("[PaperPilot] ReadableStream.getReader not available, falling back to non-streaming...\n");
+        return await callNonStreaming();
+      }
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || ""; // Keep incomplete line
+      const reader = (response.body as any).getReader();
+      const decoder = new TextDecoder("utf-8");
+      let accumulated = "";
+      let buffer = "";
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith("data:")) continue;
-        const dataStr = trimmed.slice(5).trim();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        if (dataStr === "[DONE]") break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
-        try {
-          const parsed = JSON.parse(dataStr);
-          const delta = parsed.choices?.[0]?.delta?.content || "";
-          if (delta) {
-            accumulated += delta;
-            options?.onChunk?.(delta, accumulated);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data:")) continue;
+          const dataStr = trimmed.slice(5).trim();
+
+          if (dataStr === "[DONE]") break;
+
+          try {
+            const parsed = JSON.parse(dataStr);
+            const delta = parsed.choices?.[0]?.delta?.content || "";
+            if (delta) {
+              accumulated += delta;
+              options?.onChunk?.(delta, accumulated);
+            }
+          } catch {
+            // Ignore partial or non-json SSE lines
           }
-        } catch {
-          // Ignore partial or non-json SSE lines
         }
       }
-    }
 
-    return accumulated;
+      return accumulated;
+    } catch (streamErr: any) {
+      dump(`[PaperPilot] Streaming failed or unsupported: ${streamErr.message || streamErr}. Downgrading to non-streaming...\n`);
+      return await callNonStreaming();
+    }
   }
 }

@@ -7,7 +7,8 @@ import { NoteExporter } from "./note-exporter";
 import { PromptManager, DOMAIN_PROMPTS } from "../ai/prompts";
 import { AIClient } from "../ai/client";
 import { PaperDigestService } from "../ai/digest";
-import { TranslatorManager } from "../translator";
+import { PaperPilotSidebarController, PendingAction } from "./controller";
+import { PaperContextService } from "../reader/paper-context";
 
 export class SidebarPanel {
   private container: HTMLElement;
@@ -15,6 +16,7 @@ export class SidebarPanel {
   private currentItemKey: string = "";
   private currentTitle: string = "";
   private currentParentItemID: number = 0;
+  private currentAttachmentID: number = 0;
   private history: PaperHistory = { itemKey: "", title: "", messages: [], lastUpdated: Date.now() };
   private pendingQuote: string = "";
 
@@ -22,12 +24,25 @@ export class SidebarPanel {
     this.container = container;
     this.render();
     this.bindEvents();
+    PaperPilotSidebarController.attachPanel(this);
   }
 
-  async loadPaper(itemKey: string, title: string, parentItemID: number): Promise<void> {
+  async loadPaper(
+    itemKey: string,
+    title: string,
+    parentItemID: number,
+    attachmentID?: number
+  ): Promise<void> {
     this.currentItemKey = itemKey;
     this.currentTitle = title || "当前论文";
     this.currentParentItemID = parentItemID;
+
+    if (attachmentID) {
+      this.currentAttachmentID = attachmentID;
+    } else if (parentItemID) {
+      const resolved = await PaperContextService.resolveAttachmentID(parentItemID);
+      if (resolved) this.currentAttachmentID = resolved;
+    }
 
     const titleEl = this.container.querySelector("#pp-paper-title");
     if (titleEl) {
@@ -37,6 +52,29 @@ export class SidebarPanel {
     this.history = await StorageManager.getHistory(itemKey);
     this.history.title = this.currentTitle;
     this.chatView.render(this.history.messages);
+  }
+
+  /**
+   * Consumes pending actions dispatched from selection popup or controller
+   */
+  handlePendingAction(action: PendingAction): void {
+    if (!action) return;
+
+    if (action.attachmentID && !this.currentAttachmentID) {
+      this.currentAttachmentID = action.attachmentID;
+    }
+
+    if (action.type === "ask") {
+      this.switchTab("chat");
+      this.setQuote(action.selectedText);
+      const input = this.container.querySelector("#pp-chat-input") as HTMLTextAreaElement;
+      input?.focus();
+    } else if (action.type === "interpret") {
+      this.switchTab("chat");
+      const domainSelect = this.container.querySelector("#pp-domain-select") as HTMLSelectElement;
+      const domain = (domainSelect ? domainSelect.value : "general") as DomainType;
+      this.handleInterpret(action.selectedText, domain);
+    }
   }
 
   private render(): void {
@@ -57,14 +95,13 @@ export class SidebarPanel {
           </div>
         </div>
 
-        <!-- Navigation Tabs -->
+        <!-- Navigation Tabs (Clean two tabs: Chat and Settings; Translation is in Selection Popup) -->
         <div class="paperpilot-tabs">
-          <div class="paperpilot-tab-item active" data-tab="chat">💬 问答/解读</div>
-          <div class="paperpilot-tab-item" data-tab="translate">🌐 划词翻译</div>
+          <div class="paperpilot-tab-item active" data-tab="chat">💬 伴读问答</div>
           <div class="paperpilot-tab-item" data-tab="settings">⚙️ 设置</div>
         </div>
 
-        <!-- Tab 1: Chat & Interpretation -->
+        <!-- Tab 1: Chat & Interpretation with Full-text Context -->
         <div class="paperpilot-tab-content" id="tab-content-chat" style="display:flex;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
             <span style="font-size:11px; color:var(--pp-text-muted);">解读领域:</span>
@@ -86,47 +123,30 @@ export class SidebarPanel {
               <strong style="color:var(--pp-primary);">已选定引用选段:</strong>
               <span id="pp-close-quote" style="cursor:pointer; font-weight:bold;">✕</span>
             </div>
-            <div id="pp-quote-text" style="opacity:0.85; margin-top:2px; max-height:40px; overflow:hidden; text-overflow:ellipsis;"></div>
+            <div id="pp-quote-text" style="opacity:0.85; margin-top:2px; max-height:45px; overflow:hidden; text-overflow:ellipsis;"></div>
           </div>
 
           <!-- Input Box -->
           <div class="paperpilot-input-box" style="padding: 6px 0 0 0;">
             <textarea class="paperpilot-textarea" id="pp-chat-input" placeholder="输入问题或选中论文内容追问 (Enter 发送, Shift+Enter 换行)..."></textarea>
             <div class="paperpilot-toolbar-row">
-              <span style="font-size:11px; color:var(--pp-text-muted);">Zotero 10 伴读</span>
+              <span style="font-size:11px; color:var(--pp-text-muted);">结合 PDF 全文推理</span>
               <button class="paperpilot-btn primary" id="pp-btn-send" style="padding:4px 12px;">发送</button>
             </div>
           </div>
         </div>
 
-        <!-- Tab 2: Translation View -->
-        <div class="paperpilot-tab-content" id="tab-content-translate" style="display:none;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <span style="font-weight:600; font-size:12px;">划词原文</span>
-            <button class="paperpilot-btn" id="pp-btn-retranslate" style="font-size:11px;">🔄 重新翻译</button>
-          </div>
-          <div id="pp-trans-source" style="background:var(--pp-bg-secondary); border:1px solid var(--pp-border); border-radius:6px; padding:8px; font-size:12px; min-height:60px; max-height:120px; overflow-y:auto; word-break:break-word;">
-            （在 PDF 中划词即可自动同步显示）
-          </div>
-
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; margin-bottom:8px;">
-            <span style="font-weight:600; font-size:12px;">译文结果</span>
-            <button class="paperpilot-btn" id="pp-btn-copy-trans" style="font-size:11px;">📋 复制译文</button>
-          </div>
-          <div id="pp-trans-result" style="background:var(--pp-bg-secondary); border:1px solid var(--pp-border); border-radius:6px; padding:8px; font-size:13px; flex:1; overflow-y:auto; word-break:break-word; line-height:1.5;">
-            等待划词翻译...
-          </div>
-        </div>
-
-        <!-- Tab 3: Settings View -->
+        <!-- Tab 2: Settings View -->
         <div class="paperpilot-tab-content" id="tab-content-settings" style="display:none;">
           <div style="display:flex; flex-direction:column; gap:12px; font-size:12px;">
             <div>
-              <label style="font-weight:600; display:block; margin-bottom:4px;">翻译服务引擎:</label>
+              <label style="font-weight:600; display:block; margin-bottom:4px;">划词翻译引擎:</label>
               <select id="cfg-trans-service" style="width:100%; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
+                <option value="mymemory">MyMemory (国内免 Key 直连)</option>
                 <option value="google">Google 免费翻译 (GTX 免 Key)</option>
                 <option value="bing">Bing 免费翻译</option>
-                <option value="ai">AI 大模型翻译 (基于下方配置)</option>
+                <option value="youdao">有道词典 (国内免 Key 短语词汇)</option>
+                <option value="ai">AI 大模型学术翻译</option>
               </select>
             </div>
 
@@ -203,7 +223,7 @@ export class SidebarPanel {
 
     updateProviderFields();
 
-    providerSelect.addEventListener("change", () => {
+    providerSelect?.addEventListener("change", () => {
       updateProviderFields();
     });
 
@@ -240,7 +260,7 @@ export class SidebarPanel {
         tab.classList.add("active");
         const tabName = tab.getAttribute("data-tab");
 
-        ["chat", "translate", "settings"].forEach((name) => {
+        ["chat", "settings"].forEach((name) => {
           const content = this.container.querySelector(`#tab-content-${name}`) as HTMLElement;
           if (content) {
             content.style.display = name === tabName ? "flex" : "none";
@@ -274,7 +294,7 @@ export class SidebarPanel {
       }
     });
 
-    // Action buttons in Header
+    // Header buttons
     this.container.querySelector("#pp-btn-digest")?.addEventListener("click", () => {
       this.handleGenerateDigest();
     });
@@ -296,18 +316,7 @@ export class SidebarPanel {
       }
     });
 
-    // Translation Tab copy button
-    this.container.querySelector("#pp-btn-copy-trans")?.addEventListener("click", () => {
-      const transResult = this.container.querySelector("#pp-trans-result")?.textContent || "";
-      if (transResult && navigator.clipboard) {
-        navigator.clipboard.writeText(transResult);
-        const btn = this.container.querySelector("#pp-btn-copy-trans") as HTMLButtonElement;
-        btn.textContent = "已复制!";
-        setTimeout(() => (btn.textContent = "📋 复制译文"), 1500);
-      }
-    });
-
-    // EventBus listeners
+    // EventBus fallback listeners (if active)
     EventBus.on("action:interpret", (data: { text: string }) => {
       this.switchTab("chat");
       const domainSelect = this.container.querySelector("#pp-domain-select") as HTMLSelectElement;
@@ -321,13 +330,6 @@ export class SidebarPanel {
       const inputEl = this.container.querySelector("#pp-chat-input") as HTMLTextAreaElement;
       inputEl?.focus();
     });
-
-    EventBus.on("action:translated", (data: { source: string; translated: string }) => {
-      const srcEl = this.container.querySelector("#pp-trans-source");
-      const resEl = this.container.querySelector("#pp-trans-result");
-      if (srcEl) srcEl.textContent = data.source;
-      if (resEl) resEl.textContent = data.translated;
-    });
   }
 
   private switchTab(tabName: string): void {
@@ -335,7 +337,7 @@ export class SidebarPanel {
     tabItem?.click();
   }
 
-  private setQuote(text: string): void {
+  public setQuote(text: string): void {
     this.pendingQuote = text;
     const banner = this.container.querySelector("#pp-quote-banner") as HTMLElement;
     const textEl = this.container.querySelector("#pp-quote-text") as HTMLElement;
@@ -355,7 +357,7 @@ export class SidebarPanel {
     const userMsg: ChatMessage = {
       id: "u_" + Date.now(),
       role: "user",
-      content: content || "请解读上述选段",
+      content: content || "请结合论文解读上述选段",
       timestamp: Date.now(),
       selectedQuote: quote,
     };
@@ -368,26 +370,39 @@ export class SidebarPanel {
     const aiMsg: ChatMessage = {
       id: aiMsgId,
       role: "assistant",
-      content: "思考中...",
+      content: "正在结合论文检索上下文并思考中...",
       timestamp: Date.now(),
     };
     this.history.messages.push(aiMsg);
     this.chatView.appendMessage(aiMsg);
 
-    // Build context
+    // Retrieve relevant context from PDF full text
+    let relevantContext = "";
+    if (this.currentAttachmentID) {
+      relevantContext = await PaperContextService.getRelevantContext(
+        this.currentAttachmentID,
+        content,
+        quote
+      );
+    }
+
+    let systemPrompt = `你是一位专业高效的学术伴读助手 PaperPilot。
+针对用户的提问或论文选段，给出清晰、严谨、有学术洞见的解答。`;
+
+    if (relevantContext) {
+      systemPrompt += `\n\n【论文相关原文段落参考】:\n${relevantContext}\n\n回答准则: 优先解答用户提问及所选引文，结合上述论文真实上下文进行分析推导。无法从论文支持的内容严禁臆造。`;
+    }
+
     const messagesPayload: { role: "system" | "user" | "assistant"; content: string }[] = [
-      {
-        role: "system",
-        content: "你是一位专业高效的学术伴读助手 PaperPilot。针对用户的提问或论文选段，给出清晰、严谨、有洞见的学术解答。",
-      },
+      { role: "system", content: systemPrompt },
     ];
 
-    // Append history
+    // Append chat history (last 6 messages)
     for (const m of this.history.messages.slice(-6)) {
       if (m.id === aiMsgId) break;
       let text = m.content;
       if (m.selectedQuote) {
-        text = `【引用文献选段】: ${m.selectedQuote}\n${text}`;
+        text = `【用户引用选段】: ${m.selectedQuote}\n${text}`;
       }
       messagesPayload.push({ role: m.role, content: text });
     }
@@ -395,7 +410,7 @@ export class SidebarPanel {
     try {
       let fullResponse = "";
       await AIClient.chat(messagesPayload, {
-        onChunk: (delta, accumulated) => {
+        onChunk: (_delta, accumulated) => {
           fullResponse = accumulated;
           this.chatView.updateStreamingMessage(aiMsgId, accumulated);
         },
@@ -441,7 +456,7 @@ export class SidebarPanel {
     try {
       let fullResponse = "";
       await AIClient.chat(messages, {
-        onChunk: (delta, accumulated) => {
+        onChunk: (_delta, accumulated) => {
           fullResponse = accumulated;
           this.chatView.updateStreamingMessage(aiMsgId, accumulated);
         },
@@ -472,7 +487,7 @@ export class SidebarPanel {
     const aiMsg: ChatMessage = {
       id: aiMsgId,
       role: "assistant",
-      content: "正在精读论文并提取核心四要素...",
+      content: "正在分析 PDF 全文结构...",
       timestamp: Date.now(),
       domain: "全文精读",
     };
@@ -481,17 +496,17 @@ export class SidebarPanel {
 
     try {
       let fullResponse = "";
-      await PaperDigestService.generateDigest(
-        {
-          title: this.currentTitle,
-          authors: "文献作者群",
-          abstract: "正在从当前阅读器检索摘要...",
+      await PaperDigestService.generateDigest({
+        title: this.currentTitle,
+        attachmentID: this.currentAttachmentID,
+        onProgress: (status) => {
+          this.chatView.updateStreamingMessage(aiMsgId, `*${status}*`);
         },
-        (delta, accumulated) => {
+        onChunk: (_delta, accumulated) => {
           fullResponse = accumulated;
           this.chatView.updateStreamingMessage(aiMsgId, accumulated);
-        }
-      );
+        },
+      });
 
       aiMsg.content = fullResponse;
       await StorageManager.saveHistory(this.history);

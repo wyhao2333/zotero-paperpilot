@@ -12,26 +12,33 @@ export class YoudaoTranslator implements ITranslatorService {
       trimmed
     )}`;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
-
     try {
-      const response = await fetch(url, {
-        method: "GET",
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+      dump("[PaperPilot] translation started (youdao)\n");
+      let data: any;
 
-      if (response.ok) {
-        const data = await response.json();
-        const entry = data?.data?.entries?.[0];
-        if (entry && entry.explain) {
-          return `${entry.entry}: ${entry.explain}`;
+      if (typeof Zotero !== "undefined" && Zotero.HTTP?.request) {
+        const xhr = await Zotero.HTTP.request("GET", url, {
+          responseType: "json",
+          timeout: 4000,
+        });
+
+        if (xhr && xhr.status >= 200 && xhr.status < 300) {
+          data = xhr.response || (xhr.responseText ? JSON.parse(xhr.responseText) : null);
         }
+      } else {
+        const response = await fetch(url, { method: "GET" });
+        if (response.ok) {
+          data = await response.json();
+        }
+      }
+
+      const entry = data?.data?.entries?.[0];
+      if (entry && entry.explain) {
+        dump("[PaperPilot] translation completed (youdao)\n");
+        return `${entry.entry}: ${entry.explain}`;
       }
       throw new Error("No dictionary match found");
     } catch (e: any) {
-      clearTimeout(timeoutId);
       throw e;
     }
   }

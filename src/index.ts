@@ -2,6 +2,7 @@ import { PreferenceManager } from "./core/preferences";
 import { EventBus } from "./core/event-bus";
 import { FloatingBarManager } from "./modules/reader/floating-bar";
 import { SidebarPanel } from "./modules/sidebar/panel";
+import { PaperPilotSidebarController } from "./modules/sidebar/controller";
 
 export class PaperPilotPlugin {
   public id: string = "paperpilot@zotero.org";
@@ -18,13 +19,19 @@ export class PaperPilotPlugin {
 
     PreferenceManager.init();
 
+    // Ensure Fluent localization is inserted in the main window
+    try {
+      const win = typeof Zotero !== "undefined" && Zotero.getMainWindow ? Zotero.getMainWindow() : null;
+      win?.MozXULElement?.insertFTLIfNeeded?.("paperpilot-mainWindow.ftl");
+    } catch (e) {}
+
     // 1. Register PDF Reader Selection Popup Listener (Zotero 7-10 Official API - PRIMARY PATH)
     this.registerSelectionPopupListener();
 
     // 2. Register ItemPane & Reader Right Sidebar Section
     this.registerSidebarSection();
 
-    // 3. Dynamic Reader Fallback Hook (using _iframeWindow, WeakSet guard, and lifecycle listeners)
+    // 3. Dynamic Reader Fallback Hook
     this.initReaderFallbackHooks();
   }
 
@@ -65,12 +72,11 @@ export class PaperPilotPlugin {
           "renderTextSelectionPopup",
           (event: any) => {
             FloatingBarManager.handleNativeSelectionPopup(event);
-            // Also opportunistically ensure fallback is attached
             this.scanAndHookReaders();
           },
           this.id
         );
-        dump("[PaperPilot] Reader selection listener registered\n");
+        dump("[PaperPilot] selection listener registered\n");
       }
     } catch (e) {
       dump(`[PaperPilot] Failed to register renderTextSelectionPopup: ${e}\n`);
@@ -81,19 +87,23 @@ export class PaperPilotPlugin {
     if (typeof Zotero === "undefined" || !Zotero.ItemPaneManager?.registerSection) return;
 
     try {
-      this.sectionKey = Zotero.ItemPaneManager.registerSection({
+      const key = Zotero.ItemPaneManager.registerSection({
         paneID: "paperpilot-section",
         pluginID: this.id,
         header: {
-          label: "PaperPilot 伴读",
+          l10nID: "paperpilot-item-pane-header",
           icon: `${this.rootURI}addon/icon.svg`,
         },
         sidenav: {
-          label: "PaperPilot",
+          l10nID: "paperpilot-item-pane-sidenav",
           icon: `${this.rootURI}addon/icon.svg`,
+          orderable: false,
         },
-        bodyXHTML: '<div id="paperpilot-sidebar-mount" style="min-height:420px; height:100%; display:flex; flex-direction:column;"></div>',
-        onRender: ({ body, item }: any) => {
+        bodyXHTML: '<html:div xmlns:html="http://www.w3.org/1999/xhtml" id="paperpilot-sidebar-mount" style="min-height:420px; height:100%; display:flex; flex-direction:column;"></html:div>',
+        onItemChange: ({ tabType, item, setEnabled }: any) => {
+          setEnabled(tabType === "reader");
+        },
+        onRender: async ({ body, item }: any) => {
           const mount = body.querySelector("#paperpilot-sidebar-mount") || body;
           let panel: SidebarPanel = (body as any)._paperPilotPanel;
           if (!panel) {
@@ -101,12 +111,22 @@ export class PaperPilotPlugin {
             (body as any)._paperPilotPanel = panel;
           }
           if (item) {
-            const regular = item.isRegularItem() ? item : item.parentItem || item;
-            panel.loadPaper(regular.key, regular.getField ? regular.getField("title") : "文献", regular.id);
+            const regular = item.isRegularItem?.() ? item : item.parentItem || item;
+            const title = regular?.getField ? regular.getField("title") : "文献";
+            const attachment = item.isPDFAttachment?.() ? item : await regular?.getBestAttachment?.();
+            await panel.loadPaper(regular?.key || "", title, regular?.id || 0, attachment?.id);
           }
         },
       });
-      dump(`[PaperPilot] Successfully registered sidebar section with key: ${this.sectionKey}\n`);
+
+      if (!key) {
+        dump("[PaperPilot] ERROR: ItemPane registration returned false\n");
+        throw new Error("PaperPilot ItemPane registration returned false");
+      }
+
+      this.sectionKey = key;
+      PaperPilotSidebarController.setSectionKey(key);
+      dump(`[PaperPilot] item pane section registered: ${key}\n`);
     } catch (e) {
       dump(`[PaperPilot] Failed to register ItemPane section: ${e}\n`);
     }
@@ -115,10 +135,8 @@ export class PaperPilotPlugin {
   private initReaderFallbackHooks(): void {
     if (typeof Zotero === "undefined" || !Zotero.Reader) return;
 
-    // Scan initially for any readers open prior to plugin initialization
     this.scanAndHookReaders();
 
-    // Hook reader toolbar render event (fires whenever any reader tab/window opens or is rendered)
     try {
       if (typeof Zotero.Reader.registerEventListener === "function") {
         Zotero.Reader.registerEventListener(
@@ -131,7 +149,6 @@ export class PaperPilotPlugin {
       }
     } catch (e) {}
 
-    // Hook Zotero Notifier for tab changes
     try {
       if (Zotero.Notifier && typeof Zotero.Notifier.registerObserver === "function") {
         this.notifierID = Zotero.Notifier.registerObserver(

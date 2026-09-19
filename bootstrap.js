@@ -49,11 +49,25 @@ async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
     const manifestURI = Services.io.newURI(rootURI + "manifest.json");
     chromeHandle = aomStartup.registerChrome(manifestURI, [
       ["content", "paperpilot", rootURI + "chrome/content/"],
+      ["locale", "paperpilot", "en-US", rootURI + "addon/locale/en-US/"],
+      ["locale", "paperpilot", "zh-CN", rootURI + "addon/locale/zh-CN/"],
     ]);
-    dump("[PaperPilot] Chrome registered: chrome://paperpilot/content/\n");
+    dump("[PaperPilot] Chrome registered: chrome://paperpilot/content/ & locales\n");
   } catch (e) {
     dump("[PaperPilot] registerChrome notice: " + e + "\n");
   }
+
+  // Insert Fluent localization into main windows
+  try {
+    const mainWindows = typeof Zotero !== "undefined" && Zotero.getMainWindows
+      ? Zotero.getMainWindows()
+      : (typeof Zotero !== "undefined" && Zotero.getMainWindow ? [Zotero.getMainWindow()].filter(Boolean) : []);
+    for (const win of mainWindows) {
+      try {
+        win.MozXULElement?.insertFTLIfNeeded?.("paperpilot-mainWindow.ftl");
+      } catch (e) {}
+    }
+  } catch (e) {}
 
   // 3. Register native Zotero Preference Pane (Zotero 7/10 async API)
   try {
@@ -116,6 +130,10 @@ async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
 
 async function onMainWindowLoad({ window }) {
   try {
+    try {
+      window.MozXULElement?.insertFTLIfNeeded?.("paperpilot-mainWindow.ftl");
+    } catch (e) {}
+
     const pluginInstance = typeof Zotero !== "undefined" ? Zotero.PaperPilot : null;
     if (pluginInstance && typeof pluginInstance.onMainWindowLoad === "function") {
       await pluginInstance.onMainWindowLoad(window);

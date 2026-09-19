@@ -12,32 +12,43 @@ export class BingTranslator implements ITranslatorService {
     const targetLang = options.to === "zh-CN" ? "zh-Hans" : options.to || "zh-Hans";
     const url = "https://www.bing.com/ttranslatev3";
 
-    const body = new URLSearchParams({
-      fromLang: "auto-detect",
-      text: trimmed,
-      to: targetLang,
-    });
+    const bodyStr = `fromLang=auto-detect&text=${encodeURIComponent(trimmed)}&to=${encodeURIComponent(targetLang)}`;
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      dump("[PaperPilot] translation started (bing)\n");
+      let data: any;
 
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        },
-        body: body.toString(),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+      if (typeof Zotero !== "undefined" && Zotero.HTTP?.request) {
+        const xhr = await Zotero.HTTP.request("POST", url, {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+          },
+          body: bodyStr,
+          responseType: "json",
+          timeout: 4000,
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data) && data[0]?.translations?.[0]?.text) {
-          return data[0].translations[0].text;
+        if (xhr && xhr.status >= 200 && xhr.status < 300) {
+          data = xhr.response || (xhr.responseText ? JSON.parse(xhr.responseText) : null);
         }
+      } else {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+          },
+          body: bodyStr,
+        });
+        if (response.ok) {
+          data = await response.json();
+        }
+      }
+
+      if (Array.isArray(data) && data[0]?.translations?.[0]?.text) {
+        dump("[PaperPilot] translation completed (bing)\n");
+        return data[0].translations[0].text;
       }
     } catch (e: any) {
       dump(`[PaperPilot] Bing translate fallback attempt: ${e.message || e}\n`);

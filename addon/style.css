@@ -114,6 +114,31 @@
   word-break: break-word;
 }
 
+/* 2.1 Native Selection Popup Integration */
+.paperpilot-selection-wrapper {
+  display: flex !important;
+  flex-direction: column !important;
+  border-top: 1px solid rgba(128, 128, 128, 0.25) !important;
+  margin-top: 4px !important;
+  padding-top: 4px !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 12px !important;
+}
+
+.paperpilot-btn-popup {
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.paperpilot-btn-popup:hover {
+  opacity: 0.9;
+  filter: brightness(0.96);
+}
+
+.paperpilot-inline-result {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
 /* 3. Sidebar Container */
 .paperpilot-sidebar {
   display: flex;

@@ -40,14 +40,27 @@ export class ChatView {
 
     el.innerHTML = html;
 
-    const copyBtn = el.querySelector(".btn-copy-msg");
+    const copyBtn = el.querySelector(".btn-copy-msg") as HTMLButtonElement;
     if (copyBtn) {
       copyBtn.addEventListener("click", () => {
-        if (navigator.clipboard) {
-          navigator.clipboard.writeText(msg.content);
-          copyBtn.textContent = "已复制!";
-          setTimeout(() => (copyBtn.textContent = "📋 复制"), 1500);
+        const copyText = msg.content;
+        const nav = typeof navigator !== "undefined" ? navigator : null;
+        if (nav?.clipboard?.writeText) {
+          nav.clipboard.writeText(copyText).catch(() => {});
+        } else if (typeof Zotero !== "undefined" && (Zotero as any).Utilities?.copyTextToClipboard) {
+          (Zotero as any).Utilities.copyTextToClipboard(copyText);
+        } else {
+          try {
+            const ta = document.createElement("textarea");
+            ta.value = copyText;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+          } catch (e) {}
         }
+        copyBtn.textContent = "已复制!";
+        setTimeout(() => (copyBtn.textContent = "📋 复制"), 1500);
       });
     }
 

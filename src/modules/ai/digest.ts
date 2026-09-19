@@ -1,46 +1,122 @@
 import { AIClient } from "./client";
+import { PaperContextService } from "../reader/paper-context";
 
-export interface PaperMetadata {
+export interface DigestOptions {
   title: string;
-  authors: string;
-  year?: string | number;
-  publication?: string;
-  abstract?: string;
+  authors?: string;
+  attachmentID?: number;
+  onProgress?: (status: string) => void;
+  onChunk?: (delta: string, accumulated: string) => void;
 }
 
 export class PaperDigestService {
   static async generateDigest(
-    metadata: PaperMetadata,
-    onChunk?: (delta: string, accumulated: string) => void
+    options: DigestOptions
   ): Promise<string> {
-    const systemPrompt = `你是一位世界级学术审稿专家。请为这篇学术论文生成一份高质量、结构严谨的【PaperPilot 精读速读报告】。
-必须采用 Markdown 格式，包含以下清晰模块：
+    const { title, authors = "未知作者", attachmentID, onProgress, onChunk } = options;
 
-### 📌 1. 研究痛点与核心动机 (Problem & Motivation)
-- 该领域目前存在哪些未解决的关键瓶颈或科学争论？
-- 本文试图回答的根本科学/工程问题是什么？
+    let chunks: string[] = [];
+    if (attachmentID) {
+      if (onProgress) onProgress("正在从 PDF 提取全文文本...");
+      chunks = await PaperContextService.getDigestContext(attachmentID);
+    }
 
-### 🚀 2. 核心创新与方法论 (Key Methodology & Innovation)
-- 本文提出了什么新理论、新算法、新模型或新材料/实验设计？
+    const systemPrompt = `你是一位顶级学术审稿专家与导师。请为该学术论文生成一份高质量、真实严谨的【PaperPilot 全文精读速读报告】。
+所有总结必须严格基于提供的论文实际内容，不臆造任何未提及的数据或结论。
+报告采用 Markdown 格式，必须包含以下清晰规范的 9 大核心模块：
+
+### 📌 1. 研究问题与核心动机 (Problem & Motivation)
+- 该领域目前存在哪些未解决的关键科学/工程瓶颈或争议？
+- 本文试图回答的根本问题是什么？
+
+### 🚀 2. 理论模型与方法架构 (Methodology & Architecture)
+- 本文提出了什么新算法、模型架构、理论框架或实验方案？
 - 其技术路线相较于前人工作的本质突破点何在？
 
-### 📊 3. 关键实验结论与证据支撑 (Key Findings & Evidence)
-- 核心实验/实证结果如何？关键数据指标是否显著支撑了作者论点？
+### 📐 3. 关键公式与数学/物理模型 (Key Formulas & Models)
+- 提炼核心公式、目标函数或控制方程（若有），并简述物理/数学意义。
 
-### ⚠️ 4. 潜在局限与未来启发 (Limitations & Future Work)
-- 本文在假设、样本量、泛化性或工程实现上存在哪些边界或妥协？
-- 对后续研究有何直接启发？`;
+### 📊 4. 实验设计与数据支撑 (Experiments & Datasets)
+- 采用的核心数据集、基准评测或实验平台是什么？
 
-    const userContent = `论文标题：${metadata.title}
-作者：${metadata.authors}
-发表年份/期刊：${metadata.year || "未知"} ${metadata.publication || ""}
-论文摘要：
-${metadata.abstract || "（暂未提取到摘要文本，请根据标题与上下文进行解析）"}`;
+### 📈 5. 核心实验结论与指标 (Key Findings & Evidence)
+- 核心指标表现如何？作者的主要定量/定性结论是什么？
+
+### 💡 6. 本文核心创新点 (Novel Contributions)
+- 总结 2-3 点最具代表性的贡献。
+
+### ⚠️ 7. 潜在局限与边界条件 (Limitations & Constraints)
+- 本文在理论假设、泛化性、计算开销或样本量上存在哪些局限？
+
+### 🔗 8. 与前人/同类方法的关系与对比 (Relation to Prior Work)
+- 本文与经典或同类竞争方法的主要差异是什么？
+
+### ❓ 9. 值得进一步追问与研究的问题 (Key Questions for Discussion)
+- 阅读本文后最值得向作者或领域学者深入探讨的 3 个高价值问题。`;
+
+    // Case 1: No PDF text could be extracted
+    if (!chunks || chunks.length === 0) {
+      if (onProgress) onProgress("正在根据文献信息生成初步分析...");
+      const fallbackPrompt = `论文标题：《${title}》\n作者：${authors}\n\n注意：当前未能在本地 PDF 中提取到纯文本（可能为未执行 OCR 的扫描件）。请基于标题与学术常识给出研究主题推断并提示用户补充上下文。`;
+      return await AIClient.chat(
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: fallbackPrompt },
+        ],
+        { onChunk }
+      );
+    }
+
+    // Case 2: Short / medium paper (<= 3 chunks, approx <= 6000 chars) -> Single comprehensive pass
+    if (chunks.length <= 3) {
+      if (onProgress) onProgress("正在综合分析论文全文...");
+      const fullText = chunks.join("\n\n");
+      const userContent = `论文标题：《${title}》\n作者：${authors}\n\n论文真实全文内容：\n\"\"\"\n${fullText}\n\"\"\"`;
+
+      return await AIClient.chat(
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ],
+        { onChunk }
+      );
+    }
+
+    // Case 3: Long paper -> Map-Reduce multi-stage synthesis
+    if (onProgress) onProgress(`全文共 ${chunks.length} 个片段，正在执行分块提炼与精读...`);
+
+    const groupSize = 3;
+    const partialSummaries: string[] = [];
+
+    for (let i = 0; i < chunks.length; i += groupSize) {
+      const groupChunks = chunks.slice(i, i + groupSize);
+      const partIndex = Math.floor(i / groupSize) + 1;
+      const totalParts = Math.ceil(chunks.length / groupSize);
+
+      if (onProgress) onProgress(`正在精读论文第 ${partIndex}/${totalParts} 部分...`);
+
+      const partPrompt = `请对以下论文片段（第 ${partIndex}/${totalParts} 部分）提取核心要点（研究动机、方法细节、公式、实验结果或结论）：\n\n"""\n${groupChunks.join("\n\n")}\n"""`;
+      const partSummary = await AIClient.chat([
+        {
+          role: "system",
+          content: "你是一位专业学术研究助手，请精炼提取所给论文选段中的关键技术细节、实验数据和方法论要点。",
+        },
+        { role: "user", content: partPrompt },
+      ]);
+
+      partialSummaries.push(`【第 ${partIndex} 部分要点】:\n${partSummary}`);
+    }
+
+    // Final synthesis
+    if (onProgress) onProgress("正在将各部分要点综合生成最终 9 大模块速读报告...");
+    const synthesisUserContent = `论文标题：《${title}》\n作者：${authors}\n\n以下是从论文全文各章节提炼的核心要点：\n\n${partialSummaries.join(
+      "\n\n"
+    )}\n\n请严格基于上述要点，输出完整的 9 大模块【PaperPilot 全文精读速读报告】。`;
 
     return await AIClient.chat(
       [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userContent },
+        { role: "user", content: synthesisUserContent },
       ],
       { onChunk }
     );

@@ -1,5 +1,5 @@
 /**
- * PaperPilot Bootstrap Lifecycle for Zotero 7-10
+ * PaperPilot Bootstrap Lifecycle for Zotero 10
  */
 /* global Components, Services, Zotero, dump, APP_SHUTDOWN */
 
@@ -69,7 +69,7 @@ async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
     }
   } catch (e) {}
 
-  // 3. Register native Zotero Preference Pane (Zotero 7/10 async API)
+  // 3. Register native Zotero Preference Pane (Zotero 10 async API)
   try {
     if (typeof Zotero !== "undefined" && Zotero.PreferencePanes?.register) {
       const paneID = await Zotero.PreferencePanes.register({

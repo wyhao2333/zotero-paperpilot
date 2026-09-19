@@ -111,13 +111,63 @@ export class PaperPilotSidebarController {
   }
 
   static resolveReaderTabID(win: any, reader?: any): string {
-    if (reader) {
-      if (reader._tabID) return String(reader._tabID);
-      if (reader.tabID) return String(reader.tabID);
+    const readerApi =
+      win?.Zotero?.Reader ||
+      (typeof Zotero !== "undefined" ? (Zotero as any).Reader : null);
+
+    const verifyTab = (candidate: any): string => {
+      if (!candidate) return "";
+      const strId = String(candidate).trim();
+      if (!strId || strId === "zotero-pane") return "";
+      if (readerApi && typeof readerApi.getByTabID === "function") {
+        try {
+          const verified = readerApi.getByTabID(strId);
+          if (verified) return strId;
+        } catch (e) {
+          return "";
+        }
+      }
+      return "";
+    };
+
+    // 1. First priority: Public reader.tabID (verified)
+    if (reader?.tabID) {
+      const verified = verifyTab(reader.tabID);
+      if (verified) return verified;
     }
+
+    // 2. Second priority: itemID -> tab via win.Zotero_Tabs.getTabIDByItemID (verified)
+    if (reader?.itemID && win?.Zotero_Tabs && typeof win.Zotero_Tabs.getTabIDByItemID === "function") {
+      try {
+        const res = win.Zotero_Tabs.getTabIDByItemID(reader.itemID);
+        let candidateId: any = "";
+        if (typeof res === "string" || typeof res === "number") {
+          candidateId = res;
+        } else if (Array.isArray(res) && res.length > 0) {
+          candidateId =
+            typeof res[0] === "string" || typeof res[0] === "number"
+              ? res[0]
+              : res[0]?.id || res[0]?.tabID;
+        } else if (res && typeof res === "object") {
+          candidateId = res.id || res.tabID;
+        }
+        const verified = verifyTab(candidateId);
+        if (verified) return verified;
+      } catch (e) {}
+    }
+
+    // 3. Third priority: selectedID fallback (verified, never zotero-pane)
     if (win?.Zotero_Tabs?.selectedID) {
-      return String(win.Zotero_Tabs.selectedID);
+      const verified = verifyTab(win.Zotero_Tabs.selectedID);
+      if (verified) return verified;
     }
+
+    // 4. Last fallback: reader._tabID for legacy compatibility only (verified)
+    if (reader?._tabID) {
+      const verified = verifyTab(reader._tabID);
+      if (verified) return verified;
+    }
+
     return "";
   }
 
@@ -319,13 +369,13 @@ export class PaperPilotSidebarController {
 
   private static async getItemDetailsContextWithRetry(win: any, tabID: string): Promise<any> {
     for (let i = 0; i < 10; i++) {
-      if (win.ZoteroContextPane?.context?._getItemContext) {
+      if (tabID && win.ZoteroContextPane?.context?._getItemContext) {
         const itemDetails = win.ZoteroContextPane.context._getItemContext(tabID);
         if (itemDetails) return itemDetails;
       }
       if (win.ZoteroContextPane?.context?._activeItemContext) {
         const active = win.ZoteroContextPane.context._activeItemContext;
-        if (!tabID || !active.tabID || active.tabID === tabID) {
+        if (active && tabID && active.tabID === tabID) {
           return active;
         }
       }

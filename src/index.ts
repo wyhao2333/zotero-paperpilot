@@ -40,7 +40,7 @@ export class PaperPilotPlugin {
       dump(`[PaperPilot] Notice in init window loading: ${e}\n`);
     }
 
-    // 1. Register PDF Reader Selection Popup Listener (Zotero 7-10 Official API - PRIMARY PATH)
+    // 1. Register PDF Reader Selection Popup Listener (Zotero 10 Official API - PRIMARY PATH)
     this.registerSelectionPopupListener();
 
     // 2. Register ItemPane & Reader Right Sidebar Section

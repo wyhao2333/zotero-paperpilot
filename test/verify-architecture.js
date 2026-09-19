@@ -306,7 +306,28 @@ async function runStaticValidation() {
   require("./test-runtime-global-safety.js");
   require("./test-note-renderer-production.js");
   require("./test-controller-reader-resolution.js");
-  console.log("✅ Check 22 PASS: Math renderer token safety, session recovery, note schema isolation, and runtime compatibility verified.");
+  // Check 23: Release Gate & Metadata Verification (Zotero 10 Only, No update_url, MIT License)
+  console.log("\n[Check 23] Verifying Release Metadata & Zotero 10 Compliance...");
+  const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf-8"));
+  assert.strictEqual(manifest.version, "1.0.1", "manifest.json version must be 1.0.1");
+  assert.strictEqual(manifest.applications.zotero.strict_min_version, "10.0", "strict_min_version must be 10.0");
+  assert.strictEqual(manifest.applications.zotero.strict_max_version, "10.*", "strict_max_version must be 10.*");
+  assert(!("update_url" in manifest.applications.zotero), "update_url must be removed for v1.0.1 release");
+
+  const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8"));
+  assert.strictEqual(pkg.version, "1.0.1", "package.json version must be 1.0.1");
+  assert(!pkg.keywords.includes("zotero-7"), "package.json keywords must not contain zotero-7");
+  assert(pkg.keywords.includes("zotero-10"), "package.json keywords must contain zotero-10");
+
+  assert(fs.existsSync("LICENSE"), "LICENSE file must exist");
+  const licenseText = fs.readFileSync("LICENSE", "utf-8");
+  assert(licenseText.includes("MIT License") && licenseText.includes("Copyright (c) 2026 wyhao2333"), "LICENSE must be standard MIT with Copyright (c) 2026 wyhao2333");
+  assert(fs.existsSync("package-lock.json"), "package-lock.json must be tracked and present");
+
+  const readme = fs.readFileSync("README.md", "utf-8");
+  const forbiddenWordsRegex = /完美|毫秒级|零门槛|任意兼容|彻底摒弃|Zotero 7|7-10|7–10|zotero-7/;
+  assert(!forbiddenWordsRegex.test(readme), "README.md must not contain hyperbolic words or Zotero 7 claims");
+  console.log("✅ Check 23 PASS: Release metadata, Zotero 10 compliance, MIT license, and lockfile verified.");
 
   console.log("\n==================================================");
   console.log("STATIC CHECK PASS (Requires manual Zotero GUI verification)");

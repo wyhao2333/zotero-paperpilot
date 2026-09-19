@@ -1,5 +1,5 @@
 /**
- * Zotero 7-10 Environment Type Definitions
+ * Zotero 10 Environment Type Definitions
  */
 
 declare const Zotero: any;

@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "PaperPilot",
   "version": "1.0.1",
-  "description": "Smart Selection Translation, AI Domain Interpretation & Full-text Copilot for Zotero 7-10",
+  "description": "Academic reading assistant for Zotero 10",
   "icons": {
     "48": "addon/icon.svg"
   },
@@ -11,9 +11,8 @@
   "applications": {
     "zotero": {
       "id": "paperpilot@zotero.org",
-      "strict_min_version": "7.0",
-      "strict_max_version": "10.*",
-      "update_url": "https://raw.githubusercontent.com/wyhao2333/zotero-paperpilot/main/updates.json"
+      "strict_min_version": "10.0",
+      "strict_max_version": "10.*"
     }
   }
 }

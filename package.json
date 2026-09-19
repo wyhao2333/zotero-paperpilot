@@ -1,7 +1,7 @@
 {
   "name": "zotero-paperpilot",
   "version": "1.0.1",
-  "description": "Smart Selection Translation, AI Domain Interpretation & Full-text Copilot for Zotero 7-10",
+  "description": "Academic reading assistant with translation, AI interpretation, PDF chat and paper digest for Zotero 10",
   "main": "addon/index.js",
   "scripts": {
     "compile": "node esbuild.js",
@@ -12,7 +12,6 @@
   "keywords": [
     "zotero",
     "zotero-plugin",
-    "zotero-7",
     "zotero-10",
     "translate",
     "ai",

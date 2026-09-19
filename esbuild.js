@@ -20,7 +20,7 @@ function addDirectoryToZip(zip, folderPath, zipFolder) {
 }
 
 async function build() {
-  console.log("[PaperPilot] Building IIFE bundle with esbuild for Zotero 7-10...");
+  console.log("[PaperPilot] Building IIFE bundle with esbuild for Zotero 10...");
 
   // Ensure output directories exist
   if (!fs.existsSync("addon")) fs.mkdirSync("addon", { recursive: true });
@@ -47,7 +47,7 @@ async function build() {
   console.log("[PaperPilot] IIFE bundle generated -> chrome/content/scripts/index.js & addon/index.js");
 
   if (isPackage) {
-    console.log("[PaperPilot] Packaging .xpi bundle for Zotero 7-10...");
+    console.log("[PaperPilot] Packaging .xpi bundle for Zotero 10...");
     const zip = new JSZip();
 
     // 1. Root files

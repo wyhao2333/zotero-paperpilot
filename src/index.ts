@@ -207,11 +207,23 @@ export class PaperPilotPlugin {
           const mount = body.querySelector("#paperpilot-sidebar-mount") || body;
           let panel: SidebarPanel = (mount as any)._paperPilotPanel || (body as any)._paperPilotPanel;
           if (!panel) {
-            panel = new SidebarPanel(mount);
+            try {
+              panel = new SidebarPanel(mount);
+              (mount as any)._paperPilotPanel = panel;
+              (body as any)._paperPilotPanel = panel;
+              PaperPilotSidebarController.attachPanel(panel, { tabID, body, itemDetails, item, mount });
+              dump(`[PaperPilot] SidebarPanel constructed and bound successfully for tabID=${tabID}\n`);
+            } catch (err: any) {
+              dump(
+                `[PaperPilot Sidebar] FATAL: Failed to construct SidebarPanel: ${err?.message || err}\n${err?.stack || ""}\n`
+              );
+              Zotero.logError?.(err);
+            }
+          } else {
+            (mount as any)._paperPilotPanel = panel;
+            (body as any)._paperPilotPanel = panel;
+            PaperPilotSidebarController.attachPanel(panel, { tabID, body, itemDetails, item, mount });
           }
-          (mount as any)._paperPilotPanel = panel;
-          (body as any)._paperPilotPanel = panel;
-          PaperPilotSidebarController.attachPanel(panel, { tabID, body, itemDetails, item, mount });
         },
         onDestroy: ({ body }: any) => {
           try {

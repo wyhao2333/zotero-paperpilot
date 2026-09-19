@@ -10,6 +10,8 @@ import { PaperDigestService } from "../ai/digest";
 import { PendingAction } from "./controller";
 import { PaperContextService } from "../reader/paper-context";
 
+const HTML_NS = "http://www.w3.org/1999/xhtml";
+
 export class SidebarPanel {
   private container: HTMLElement;
   private chatView!: ChatView;
@@ -97,120 +99,197 @@ export class SidebarPanel {
   }
 
   private render(): void {
-    this.container.innerHTML = `
-      <div class="paperpilot-sidebar">
-        <!-- Header -->
-        <div class="paperpilot-header">
-          <div class="paperpilot-title">
-            <span>🚀</span>
-            <span id="pp-paper-title" style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-              PaperPilot
-            </span>
-          </div>
-          <div style="display:flex; gap:4px;">
-            <button class="paperpilot-btn" id="pp-btn-digest" title="一键生成全文精读报告">📑 全文速读</button>
-            <button class="paperpilot-btn" id="pp-btn-export" title="导出对话至 Zotero 笔记">💾 笔记</button>
-            <button class="paperpilot-btn" id="pp-btn-clear" title="清空当前论文对话">🗑️</button>
-          </div>
-        </div>
+    const doc = this.container.ownerDocument;
+    const win = doc.defaultView;
+    const MozXULElement =
+      win?.MozXULElement ||
+      (typeof MozXULElement !== "undefined"
+        ? MozXULElement
+        : typeof Zotero !== "undefined" && (Zotero as any).getMainWindow?.()?.MozXULElement);
 
-        <!-- Navigation Tabs -->
-        <div class="paperpilot-tabs">
-          <div class="paperpilot-tab-item active" data-tab="chat">💬 伴读问答</div>
-          <div class="paperpilot-tab-item" data-tab="settings">⚙️ 设置</div>
-        </div>
+    const markup = `
+<html:div
+  xmlns:html="http://www.w3.org/1999/xhtml"
+  class="paperpilot-sidebar">
 
-        <!-- Tab 1: Chat & Interpretation with Full-text Context -->
-        <div class="paperpilot-tab-content" id="tab-content-chat" style="display:flex;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-            <span style="font-size:11px; color:var(--pp-text-muted);">解读领域:</span>
-            <select id="pp-domain-select" style="font-size:11px; padding:2px 4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
-              <option value="general">通用学术 (跨学科)</option>
-              <option value="cs_ai">计算机与人工智能 (CS/AI)</option>
-              <option value="med_bio">医学与生物生命科学 (Med/Bio)</option>
-              <option value="econ_social">经济金融与人文社科</option>
-              <option value="engineering">工程与物理科学</option>
-              <option value="custom">自定义领域</option>
-            </select>
-          </div>
+  <!-- Header -->
+  <html:div class="paperpilot-header">
+    <html:div class="paperpilot-title">
+      <html:span>🚀</html:span>
+      <html:span id="pp-paper-title" style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        PaperPilot
+      </html:span>
+    </html:div>
+    <html:div style="display:flex; gap:4px;">
+      <html:button class="paperpilot-btn" id="pp-btn-digest" title="一键生成全文精读报告">📑 全文速读</html:button>
+      <html:button class="paperpilot-btn" id="pp-btn-export" title="导出对话至 Zotero 笔记">💾 笔记</html:button>
+      <html:button class="paperpilot-btn" id="pp-btn-clear" title="清空当前论文对话">🗑️</html:button>
+    </html:div>
+  </html:div>
 
-          <div class="paperpilot-chat-history" id="pp-chat-container"></div>
+  <!-- Navigation Tabs -->
+  <html:div class="paperpilot-tabs">
+    <html:div class="paperpilot-tab-item active" data-tab="chat">💬 伴读问答</html:div>
+    <html:div class="paperpilot-tab-item" data-tab="settings">⚙️ 设置</html:div>
+  </html:div>
 
-          <!-- Pending Quote Banner -->
-          <div id="pp-quote-banner" style="display:none; background:var(--pp-primary-light); padding:6px 8px; border-radius:4px; font-size:11px; border-left:3px solid var(--pp-primary); margin-top:4px;">
-            <div style="display:flex; justify-content:space-between;">
-              <strong style="color:var(--pp-primary);">已选定引用选段:</strong>
-              <span id="pp-close-quote" style="cursor:pointer; font-weight:bold;">✕</span>
-            </div>
-            <div id="pp-quote-text" style="opacity:0.85; margin-top:2px; max-height:45px; overflow:hidden; text-overflow:ellipsis;"></div>
-          </div>
+  <!-- Tab 1: Chat & Interpretation with Full-text Context -->
+  <html:div class="paperpilot-tab-content" id="tab-content-chat" style="display:flex;">
+    <html:div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+      <html:span style="font-size:11px; color:var(--pp-text-muted);">解读领域:</html:span>
+      <html:select id="pp-domain-select" style="font-size:11px; padding:2px 4px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
+        <html:option value="general">通用学术 (跨学科)</html:option>
+        <html:option value="cs_ai">计算机与人工智能 (CS/AI)</html:option>
+        <html:option value="med_bio">医学与生物生命科学 (Med/Bio)</html:option>
+        <html:option value="econ_social">经济金融与人文社科</html:option>
+        <html:option value="engineering">工程与物理科学</html:option>
+        <html:option value="custom">自定义领域</html:option>
+      </html:select>
+    </html:div>
 
-          <!-- Input Box -->
-          <div class="paperpilot-input-box" style="padding: 6px 0 0 0;">
-            <textarea class="paperpilot-textarea" id="pp-chat-input" placeholder="输入问题或选中论文内容追问 (Enter 发送, Shift+Enter 换行)..."></textarea>
-            <div class="paperpilot-toolbar-row">
-              <span style="font-size:11px; color:var(--pp-text-muted);">结合 PDF 全文推理</span>
-              <button class="paperpilot-btn primary" id="pp-btn-send" style="padding:4px 12px;">发送</button>
-            </div>
-          </div>
-        </div>
+    <html:div class="paperpilot-chat-history" id="pp-chat-container"></html:div>
 
-        <!-- Tab 2: Settings View -->
-        <div class="paperpilot-tab-content" id="tab-content-settings" style="display:none;">
-          <div style="display:flex; flex-direction:column; gap:12px; font-size:12px;">
-            <div>
-              <label style="font-weight:600; display:block; margin-bottom:4px;">划词翻译引擎:</label>
-              <select id="cfg-trans-service" style="width:100%; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
-                <option value="mymemory">MyMemory (国内免 Key 直连)</option>
-                <option value="google">Google 免费翻译 (GTX 免 Key)</option>
-                <option value="bing">Bing 免费翻译</option>
-                <option value="youdao">有道词典 (国内免 Key 短语词汇)</option>
-                <option value="ai">AI 大模型学术翻译</option>
-              </select>
-            </div>
+    <!-- Pending Quote Banner -->
+    <html:div id="pp-quote-banner" style="display:none; background:var(--pp-primary-light); padding:6px 8px; border-radius:4px; font-size:11px; border-left:3px solid var(--pp-primary); margin-top:4px;">
+      <html:div style="display:flex; justify-content:space-between;">
+        <html:strong style="color:var(--pp-primary);">已选定引用选段:</html:strong>
+        <html:span id="pp-close-quote" style="cursor:pointer; font-weight:bold;">✕</html:span>
+      </html:div>
+      <html:div id="pp-quote-text" style="opacity:0.85; margin-top:2px; max-height:45px; overflow:hidden; text-overflow:ellipsis;"></html:div>
+    </html:div>
 
-            <div style="display:flex; align-items:center; gap:6px;">
-              <input type="checkbox" id="cfg-auto-trans" />
-              <label for="cfg-auto-trans">划词后立即自动翻译</label>
-            </div>
+    <!-- Input Box -->
+    <html:div class="paperpilot-input-box" style="padding: 6px 0 0 0;">
+      <html:textarea class="paperpilot-textarea" id="pp-chat-input" placeholder="输入问题或选中论文内容追问 (Enter 发送, Shift+Enter 换行)..."></html:textarea>
+      <html:div class="paperpilot-toolbar-row">
+        <html:span style="font-size:11px; color:var(--pp-text-muted);">结合 PDF 全文推理</html:span>
+        <html:button class="paperpilot-btn primary" id="pp-btn-send" style="padding:4px 12px;">发送</html:button>
+      </html:div>
+    </html:div>
+  </html:div>
 
-            <hr style="border:none; border-top:1px solid var(--pp-border); margin:4px 0;"/>
+  <!-- Tab 2: Settings View -->
+  <html:div class="paperpilot-tab-content" id="tab-content-settings" style="display:none;">
+    <html:div style="display:flex; flex-direction:column; gap:12px; font-size:12px;">
+      <html:div>
+        <html:label style="font-weight:600; display:block; margin-bottom:4px;">划词翻译引擎:</html:label>
+        <html:select id="cfg-trans-service" style="width:100%; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
+          <html:option value="mymemory">MyMemory (国内免 Key 直连)</html:option>
+          <html:option value="google">Google 免费翻译 (GTX 免 Key)</html:option>
+          <html:option value="bing">Bing 免费翻译</html:option>
+          <html:option value="youdao">有道词典 (国内免 Key 短语词汇)</html:option>
+          <html:option value="ai">AI 大模型学术翻译</html:option>
+        </html:select>
+      </html:div>
 
-            <div>
-              <label style="font-weight:600; display:block; margin-bottom:4px;">AI 服务商 / 接口模式:</label>
-              <select id="cfg-ai-provider" style="width:100%; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
-                <option value="zhipu">智谱清言 (GLM)</option>
-                <option value="deepseek">DeepSeek</option>
-                <option value="openai">OpenAI (ChatGPT)</option>
-                <option value="moonshot">Moonshot (Kimi)</option>
-                <option value="qwen">通义千问 (Qwen)</option>
-                <option value="siliconflow">硅基流动 (SiliconFlow)</option>
-                <option value="ollama">本地 Ollama</option>
-                <option value="custom">自定义 API 接口 (Custom Endpoint)</option>
-              </select>
-            </div>
+      <html:div style="display:flex; align-items:center; gap:6px;">
+        <html:input type="checkbox" id="cfg-auto-trans" />
+        <html:label for="cfg-auto-trans">划词后立即自动翻译</html:label>
+      </html:div>
 
-            <div>
-              <label style="font-weight:600; display:block; margin-bottom:4px;">API Key:</label>
-              <input type="password" id="cfg-api-key" placeholder="填入对应服务商的 API Key" style="width:100%; box-sizing:border-box; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);" />
-            </div>
+      <html:hr style="border:none; border-top:1px solid var(--pp-border); margin:4px 0;"/>
 
-            <div>
-              <label style="font-weight:600; display:block; margin-bottom:4px;">Base URL (API 根地址):</label>
-              <input type="text" id="cfg-base-url" placeholder="https://..." style="width:100%; box-sizing:border-box; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);" />
-            </div>
+      <html:div>
+        <html:label style="font-weight:600; display:block; margin-bottom:4px;">AI 服务商 / 接口模式:</html:label>
+        <html:select id="cfg-ai-provider" style="width:100%; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);">
+          <html:option value="zhipu">智谱清言 (GLM)</html:option>
+          <html:option value="deepseek">DeepSeek</html:option>
+          <html:option value="openai">OpenAI (ChatGPT)</html:option>
+          <html:option value="moonshot">Moonshot (Kimi)</html:option>
+          <html:option value="qwen">通义千问 (Qwen)</html:option>
+          <html:option value="siliconflow">硅基流动 (SiliconFlow)</html:option>
+          <html:option value="ollama">本地 Ollama</html:option>
+          <html:option value="custom">自定义 API 接口 (Custom Endpoint)</html:option>
+        </html:select>
+      </html:div>
 
-            <div>
-              <label style="font-weight:600; display:block; margin-bottom:4px;">模型名称 (Model):</label>
-              <input type="text" id="cfg-model" placeholder="e.g. glm-4-flash, deepseek-chat" style="width:100%; box-sizing:border-box; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);" />
-            </div>
+      <html:div>
+        <html:label style="font-weight:600; display:block; margin-bottom:4px;">API Key:</html:label>
+        <html:input type="password" id="cfg-api-key" placeholder="填入对应服务商的 API Key" style="width:100%; box-sizing:border-box; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);" />
+      </html:div>
 
-            <button class="paperpilot-btn primary" id="cfg-btn-save" style="padding:6px; justify-content:center; margin-top:4px;">💾 保存设置</button>
-            <div id="cfg-save-status" style="font-size:11px; color:#16a34a; text-align:center; display:none;">配置已成功保存！</div>
-          </div>
-        </div>
-      </div>
-    `;
+      <html:div>
+        <html:label style="font-weight:600; display:block; margin-bottom:4px;">Base URL (API 根地址):</html:label>
+        <html:input type="text" id="cfg-base-url" placeholder="https://..." style="width:100%; box-sizing:border-box; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);" />
+      </html:div>
+
+      <html:div>
+        <html:label style="font-weight:600; display:block; margin-bottom:4px;">模型名称 (Model):</html:label>
+        <html:input type="text" id="cfg-model" placeholder="e.g. glm-4-flash, deepseek-chat" style="width:100%; box-sizing:border-box; padding:5px; border-radius:4px; border:1px solid var(--pp-border); background:var(--pp-bg); color:var(--pp-text);" />
+      </html:div>
+
+      <html:button class="paperpilot-btn primary" id="cfg-btn-save" style="padding:6px; justify-content:center; margin-top:4px;">💾 保存设置</html:button>
+      <html:div id="cfg-save-status" style="font-size:11px; color:#16a34a; text-align:center; display:none;">配置已成功保存！</html:div>
+    </html:div>
+  </html:div>
+</html:div>
+`;
+
+    let fragment: DocumentFragment;
+    if (MozXULElement && typeof MozXULElement.parseXULToFragment === "function") {
+      fragment = MozXULElement.parseXULToFragment(markup);
+    } else {
+      // Robust XML DOMParser fallback for environments where MozXULElement is absent
+      const DOMParserClass =
+        win?.DOMParser ||
+        (typeof DOMParser !== "undefined" ? DOMParser : null) ||
+        (globalThis as any).DOMParser;
+      if (!DOMParserClass) {
+        throw new Error("Neither MozXULElement nor DOMParser is available");
+      }
+      const parser = new DOMParserClass();
+      const parsedDoc = parser.parseFromString(
+        `<html:div xmlns:html="${HTML_NS}">${markup}</html:div>`,
+        "application/xml"
+      );
+      fragment = doc.createDocumentFragment();
+      const rootNode = parsedDoc.documentElement?.firstChild || parsedDoc.documentElement;
+      if (rootNode) {
+        fragment.appendChild(rootNode);
+      }
+    }
+
+    if (fragment.ownerDocument !== doc && typeof doc.importNode === "function") {
+      fragment = doc.importNode(fragment, true) as DocumentFragment;
+    }
+
+    if (typeof this.container.replaceChildren === "function") {
+      this.container.replaceChildren(fragment);
+    } else {
+      while (this.container.firstChild) {
+        this.container.removeChild(this.container.firstChild);
+      }
+      this.container.appendChild(fragment);
+    }
+
+    // Assertions immediately following DOM construction
+    const root = this.container.querySelector(".paperpilot-sidebar") as HTMLElement;
+    const domain = this.container.querySelector("#pp-domain-select") as HTMLSelectElement;
+    const input = this.container.querySelector("#pp-chat-input") as HTMLTextAreaElement;
+    const send = this.container.querySelector("#pp-btn-send") as HTMLButtonElement;
+    const digest = this.container.querySelector("#pp-btn-digest") as HTMLButtonElement;
+
+    if (!root || !domain || !input || !send || !digest) {
+      throw new Error(
+        `PaperPilot sidebar DOM incomplete: root=${!!root}, domain=${!!domain}, input=${!!input}, send=${!!send}, digest=${!!digest}`
+      );
+    }
+
+    if (
+      root.namespaceURI !== HTML_NS ||
+      domain.namespaceURI !== HTML_NS ||
+      input.namespaceURI !== HTML_NS ||
+      send.namespaceURI !== HTML_NS
+    ) {
+      throw new Error(
+        `PaperPilot sidebar namespace mismatch: root=${root.namespaceURI}, domain=${domain.namespaceURI}, input=${input.namespaceURI}, send=${send.namespaceURI}`
+      );
+    }
+
+    dump(`[PaperPilot Sidebar] root namespace=${root.namespaceURI}\n`);
+    dump(`[PaperPilot Sidebar] domain constructor=${domain.constructor?.name}\n`);
+    dump(`[PaperPilot Sidebar] input constructor=${input.constructor?.name}\n`);
+    dump(`[PaperPilot Sidebar] send constructor=${send.constructor?.name}\n`);
 
     const chatContainer = this.container.querySelector("#pp-chat-container") as HTMLElement;
     this.chatView = new ChatView(chatContainer);
@@ -227,6 +306,23 @@ export class SidebarPanel {
     const modelInput = this.container.querySelector("#cfg-model") as HTMLInputElement;
     const domainSelect = this.container.querySelector("#pp-domain-select") as HTMLSelectElement;
 
+    if (
+      !providerSelect ||
+      !transSelect ||
+      !autoTransCb ||
+      !apiKeyInput ||
+      !baseUrlInput ||
+      !modelInput ||
+      !domainSelect
+    ) {
+      dump(
+        `[PaperPilot Sidebar] ERROR: Controls found: providerSelect=${!!providerSelect}, transSelect=${!!transSelect}, autoTransCb=${!!autoTransCb}, apiKeyInput=${!!apiKeyInput}, baseUrlInput=${!!baseUrlInput}, modelInput=${!!modelInput}, domainSelect=${!!domainSelect}\n`
+      );
+      throw new Error(
+        `PaperPilot settings UI incomplete: providerSelect=${!!providerSelect}, transSelect=${!!transSelect}, autoTransCb=${!!autoTransCb}, apiKeyInput=${!!apiKeyInput}, baseUrlInput=${!!baseUrlInput}, modelInput=${!!modelInput}, domainSelect=${!!domainSelect}`
+      );
+    }
+
     if (transSelect) transSelect.value = prefs.translationService;
     if (autoTransCb) autoTransCb.checked = prefs.autoTranslateSelection;
     if (providerSelect) providerSelect.value = prefs.selectedAIProvider;
@@ -242,12 +338,12 @@ export class SidebarPanel {
 
     updateProviderFields();
 
-    providerSelect?.addEventListener("change", () => {
+    providerSelect.addEventListener("change", () => {
       updateProviderFields();
     });
 
     // Immediate domain synchronization: switching domain in sidebar updates defaultDomain immediately
-    domainSelect?.addEventListener("change", () => {
+    domainSelect.addEventListener("change", () => {
       const newDomain = domainSelect.value as DomainType;
       PreferenceManager.set({ defaultDomain: newDomain });
       dump(`[PaperPilot] Default domain dynamically updated to: ${newDomain}\n`);

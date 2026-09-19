@@ -183,6 +183,19 @@ async function runStaticValidation() {
   require("./verify-no-secrets.js");
   console.log("✅ Check 12 PASS: Repository secret scan clean.");
 
+  // Check 13: Sidebar DOM Construction P0 fixes (parseXULToFragment, html: namespace, assertions, try/catch)
+  console.log("\n[Check 13] Verifying Reader Sidebar DOM Construction P0 fixes...");
+  assert(!panelTs.includes("this.container.innerHTML ="), "panel.ts must NOT use raw this.container.innerHTML");
+  assert(panelTs.includes("MozXULElement.parseXULToFragment"), "panel.ts must use MozXULElement.parseXULToFragment");
+  assert(panelTs.includes('xmlns:html="http://www.w3.org/1999/xhtml"'), "panel.ts must specify xmlns:html for XHTML namespace");
+  assert(panelTs.includes("<html:div") && panelTs.includes("<html:select") && panelTs.includes("<html:button"), "panel.ts markup must use html: prefix for tags");
+  assert(panelTs.includes("root.namespaceURI !== HTML_NS"), "panel.ts must assert namespaceURI === HTML_NS");
+  assert(panelTs.includes("PaperPilot settings UI incomplete"), "initSettingsUI must throw on missing controls");
+  assert(indexTs.includes("[PaperPilot Sidebar] FATAL: Failed to construct SidebarPanel:"), "onRender must catch SidebarPanel constructor failure with FATAL log");
+  assert(chatViewTs.includes("parseMarkupToFragment") || chatViewTs.includes("MozXULElement.parseXULToFragment"), "chat-view.ts must construct fragments with parseXULToFragment");
+  assert(chatViewTs.includes("<html:div") && chatViewTs.includes('xmlns:html="${HTML_NS}"'), "chat-view.ts must use html: tags under HTML_NS");
+  console.log("✅ Check 13 PASS: Reader Sidebar DOM Construction P0 verified.");
+
   console.log("\n==================================================");
   console.log("STATIC CHECK PASS (Requires manual Zotero GUI verification)");
 }

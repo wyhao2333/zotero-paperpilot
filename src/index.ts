@@ -8,23 +8,24 @@ export class PaperPilotPlugin {
   public rootURI: string = "";
   private initialized: boolean = false;
   private sectionKey: string = "";
+  private notifierID: string | null = null;
+  private attachedDocs: WeakSet<Document> = new WeakSet();
 
   async init(data: any): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
     this.rootURI = data?.rootURI || data?.resourceURI?.spec || "";
 
-    dump("[PaperPilot] Initializing PaperPilot for Zotero 7-10...\n");
     PreferenceManager.init();
 
-    // 1. Register PDF Reader Selection Popup Listener (Zotero 7-10 Official API)
+    // 1. Register PDF Reader Selection Popup Listener (Zotero 7-10 Official API - PRIMARY PATH)
     this.registerSelectionPopupListener();
 
     // 2. Register ItemPane & Reader Right Sidebar Section
     this.registerSidebarSection();
 
-    // 3. Hook Reader fallback attachments
-    this.hookReaderTabs();
+    // 3. Dynamic Reader Fallback Hook (using _iframeWindow, WeakSet guard, and lifecycle listeners)
+    this.initReaderFallbackHooks();
   }
 
   destroy(data?: any): void {
@@ -38,6 +39,13 @@ export class PaperPilotPlugin {
       } catch (e) {
         dump(`[PaperPilot] Error unregistering section: ${e}\n`);
       }
+    }
+
+    if (this.notifierID && typeof Zotero !== "undefined" && Zotero.Notifier?.unregisterObserver) {
+      try {
+        Zotero.Notifier.unregisterObserver(this.notifierID);
+      } catch (e) {}
+      this.notifierID = null;
     }
 
     this.initialized = false;
@@ -57,10 +65,12 @@ export class PaperPilotPlugin {
           "renderTextSelectionPopup",
           (event: any) => {
             FloatingBarManager.handleNativeSelectionPopup(event);
+            // Also opportunistically ensure fallback is attached
+            this.scanAndHookReaders();
           },
           this.id
         );
-        dump("[PaperPilot] Successfully registered renderTextSelectionPopup listener.\n");
+        dump("[PaperPilot] Reader selection listener registered\n");
       }
     } catch (e) {
       dump(`[PaperPilot] Failed to register renderTextSelectionPopup: ${e}\n`);
@@ -102,25 +112,60 @@ export class PaperPilotPlugin {
     }
   }
 
-  private hookReaderTabs(): void {
+  private initReaderFallbackHooks(): void {
     if (typeof Zotero === "undefined" || !Zotero.Reader) return;
 
-    try {
-      const hookReader = (reader: any) => {
-        try {
-          const doc = reader?._internalReader?._window?.document || reader?._window?.document;
-          const win = reader?._internalReader?._window || reader?._window;
-          if (doc && win) {
-            FloatingBarManager.attachToReaderDocument(doc, win);
-          }
-        } catch (e) {}
-      };
+    // Scan initially for any readers open prior to plugin initialization
+    this.scanAndHookReaders();
 
-      if (Array.isArray(Zotero.Reader._readers)) {
-        Zotero.Reader._readers.forEach(hookReader);
+    // Hook reader toolbar render event (fires whenever any reader tab/window opens or is rendered)
+    try {
+      if (typeof Zotero.Reader.registerEventListener === "function") {
+        Zotero.Reader.registerEventListener(
+          "renderToolbar",
+          () => {
+            this.scanAndHookReaders();
+          },
+          this.id
+        );
       }
-    } catch (e) {
-      dump(`[PaperPilot] hookReaderTabs error: ${e}\n`);
+    } catch (e) {}
+
+    // Hook Zotero Notifier for tab changes
+    try {
+      if (Zotero.Notifier && typeof Zotero.Notifier.registerObserver === "function") {
+        this.notifierID = Zotero.Notifier.registerObserver(
+          {
+            notify: (action: string, type: string) => {
+              if (type === "tab") {
+                this.scanAndHookReaders();
+              }
+            },
+          },
+          ["tab"],
+          "PaperPilot"
+        );
+      }
+    } catch (e) {}
+  }
+
+  private scanAndHookReaders(): void {
+    if (typeof Zotero === "undefined" || !Zotero.Reader) return;
+
+    const readers = Zotero.Reader._readers;
+    if (!Array.isArray(readers)) return;
+
+    for (const reader of readers) {
+      try {
+        const win = reader._iframeWindow || reader._window || reader?._internalReader?._window;
+        const doc = win?.document || reader._iframeWindow?.document || reader?._window?.document;
+
+        if (doc && win && !this.attachedDocs.has(doc)) {
+          this.attachedDocs.add(doc);
+          FloatingBarManager.attachToReaderDocument(doc, win);
+          dump("[PaperPilot] fallback reader attached\n");
+        }
+      } catch (e) {}
     }
   }
 }

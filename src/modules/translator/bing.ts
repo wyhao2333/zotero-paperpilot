@@ -1,4 +1,5 @@
 import { ITranslatorService, TranslateOptions } from "./types";
+import { MyMemoryTranslator } from "./mymemory";
 
 export class BingTranslator implements ITranslatorService {
   id = "bing";
@@ -8,7 +9,7 @@ export class BingTranslator implements ITranslatorService {
     const trimmed = text.trim();
     if (!trimmed) return "";
 
-    const targetLang = options.to === "zh-CN" ? "zh-Hans" : options.to;
+    const targetLang = options.to === "zh-CN" ? "zh-Hans" : options.to || "zh-Hans";
     const url = "https://www.bing.com/ttranslatev3";
 
     const body = new URLSearchParams({
@@ -18,6 +19,9 @@ export class BingTranslator implements ITranslatorService {
     });
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -25,7 +29,9 @@ export class BingTranslator implements ITranslatorService {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         },
         body: body.toString(),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const data = await response.json();
@@ -33,16 +39,12 @@ export class BingTranslator implements ITranslatorService {
           return data[0].translations[0].text;
         }
       }
-    } catch (e) {
-      dump(`[PaperPilot] Bing translate fallback attempt: ${e}\n`);
+    } catch (e: any) {
+      dump(`[PaperPilot] Bing translate fallback attempt: ${e.message || e}\n`);
     }
 
-    // Fallback: Use GTX if Bing web endpoint is rate-limited
-    const fallbackUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(
-      options.to || "zh-CN"
-    )}&dt=t&q=${encodeURIComponent(trimmed)}`;
-    const res = await fetch(fallbackUrl);
-    const data = await res.json();
-    return data[0].map((item: any) => item[0]).join("");
+    // Fallback: Use MyMemory if Bing web endpoint is unreachable or requires token
+    const myMemory = new MyMemoryTranslator();
+    return await myMemory.translate(text, options);
   }
 }

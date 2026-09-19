@@ -1,6 +1,6 @@
 <vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
       xmlns:html="http://www.w3.org/1999/xhtml"
-      onload="if (typeof PaperPilot_Preferences !== 'undefined') { PaperPilot_Preferences.init(window); } else if (window.PaperPilot_Preferences) { window.PaperPilot_Preferences.init(window); }">
+      onload="window.PaperPilot_Preferences &amp;&amp; window.PaperPilot_Preferences.init(window)">
 
   <groupbox>
     <label><html:h2 style="font-size:15px; font-weight:600; margin:4px 0 8px 0; color:#2563eb;">🌐 划词翻译设置</html:h2></label>
@@ -65,7 +65,7 @@
     </hbox>
 
     <hbox align="center" style="margin: 8px 0; gap: 10px;">
-      <button id="pp-pref-btn-test" style="padding: 4px 12px; cursor:pointer;">⚡ 测试 API 连接</button>
+      <html:button type="button" id="pp-pref-btn-test" style="padding: 4px 12px; cursor:pointer; font-size:12px; border-radius:4px; border:1px solid #ccc; background:#f8fafc;">⚡ 测试 API 连接</html:button>
       <label id="pp-pref-test-result" style="font-size: 12px; color: #666;"></label>
     </hbox>
   </groupbox>
@@ -92,7 +92,7 @@
   </groupbox>
 
   <hbox align="center" style="margin-top: 14px; gap: 12px;">
-    <button id="pp-pref-btn-save" style="padding: 6px 22px; font-size:13px; font-weight: 600; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">💾 保存设置</button>
+    <html:button type="button" id="pp-pref-btn-save" style="padding: 6px 22px; font-size:13px; font-weight: 600; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">💾 保存设置</html:button>
     <label id="pp-pref-save-status" style="color: #16a34a; font-weight: bold; font-size:13px; display: none;">✅ 配置已保存并即时生效！</label>
   </hbox>
 

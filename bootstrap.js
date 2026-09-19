@@ -16,20 +16,32 @@ async function waitForZotero() {
 }
 
 async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
-  dump("[PaperPilot] Starting startup sequence for Zotero 7-10...\n");
-  if (!rootURI && resourceURI) {
-    rootURI = resourceURI.spec;
+  dump("[PaperPilot] PaperPilot bootstrap started\n");
+
+  // 1. Resolve & normalize addon rootURI
+  let resolvedRoot = rootURI;
+  if (!resolvedRoot && resourceURI && resourceURI.spec) {
+    resolvedRoot = resourceURI.spec;
   }
-  if (!rootURI) {
-    rootURI = "chrome://paperpilot/content/";
+  if (!resolvedRoot && typeof Zotero !== "undefined" && typeof Zotero.getAddonRootURI === "function") {
+    try {
+      resolvedRoot = Zotero.getAddonRootURI("paperpilot@zotero.org");
+    } catch (e) {}
   }
-  if (!rootURI.endsWith("/")) {
-    rootURI += "/";
+  if (!resolvedRoot) {
+    const fatalErr = new Error("[PaperPilot] Fatal: Failed to resolve addon rootURI for paperpilot@zotero.org");
+    dump(fatalErr.message + "\n" + (fatalErr.stack || "") + "\n");
+    throw fatalErr;
   }
+
+  // Ensure rootURI has exactly one trailing slash
+  resolvedRoot = resolvedRoot.replace(/\/+$/, "") + "/";
+  rootURI = resolvedRoot;
+  dump(`[PaperPilot] addon root resolved: ${rootURI}\n`);
 
   await waitForZotero();
 
-  // 1. Register chrome URI for extension assets
+  // 2. Register chrome URI for extension assets
   try {
     const aomStartup = Components.classes[
       "@mozilla.org/addons/addon-manager-startup;1"
@@ -43,23 +55,28 @@ async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
     dump("[PaperPilot] registerChrome notice: " + e + "\n");
   }
 
-  // 2. Register native Zotero Preference Pane in Edit -> Settings
+  // 3. Register native Zotero Preference Pane (Zotero 7/10 async API)
   try {
     if (typeof Zotero !== "undefined" && Zotero.PreferencePanes?.register) {
-      Zotero.PreferencePanes.register({
+      const paneID = await Zotero.PreferencePanes.register({
         pluginID: "paperpilot@zotero.org",
         src: rootURI + "chrome/content/preferences.xhtml",
         scripts: [rootURI + "chrome/content/preferences.js"],
         label: "PaperPilot",
         image: rootURI + "addon/icon.svg",
       });
-      dump("[PaperPilot] Zotero.PreferencePanes registered successfully.\n");
+      dump(`[PaperPilot] preference pane registered, paneID=${paneID}\n`);
+    } else {
+      dump("[PaperPilot] Zotero.PreferencePanes.register not available\n");
     }
   } catch (e) {
-    dump("[PaperPilot] Error registering PreferencePanes: " + e + "\n");
+    dump(`[PaperPilot] Error registering PreferencePanes: ${e}\n${e.stack || ""}\n`);
+    if (typeof Components !== "undefined") {
+      Components.utils.reportError(e);
+    }
   }
 
-  // 3. Load Main Script using loadSubScript (standard for Zotero 7-10 plugins)
+  // 4. Load Main Script using loadSubScript (IIFE bundle)
   try {
     const scriptPath = rootURI + "chrome/content/scripts/index.js";
     const ctx = {
@@ -70,26 +87,30 @@ async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
       dump,
       window: typeof window !== "undefined" ? window : undefined,
     };
+    ctx._globalThis = ctx;
 
     Services.scriptloader.loadSubScript(scriptPath, ctx, "UTF-8");
-    dump("[PaperPilot] Main script loaded via scriptloader.\n");
+    dump("[PaperPilot] main bundle loaded\n");
 
     const pluginInstance =
       (typeof Zotero !== "undefined" && Zotero.PaperPilot) ||
       ctx.PaperPilot ||
       (ctx.PaperPilotBundle && ctx.PaperPilotBundle.PaperPilot);
 
-    if (pluginInstance && typeof pluginInstance.init === "function") {
-      await pluginInstance.init({ id, version, rootURI });
-      dump("[PaperPilot] PaperPilot.init completed successfully.\n");
-    } else {
-      dump("[PaperPilot] Warning: PaperPilot plugin instance not found in context.\n");
+    if (!pluginInstance || typeof pluginInstance.init !== "function") {
+      throw new Error(`[PaperPilot] Fatal: PaperPilot plugin instance not found or init is not a function (found=${typeof pluginInstance})`);
     }
+
+    dump("[PaperPilot] plugin instance found\n");
+    dump("[PaperPilot] PaperPilot.init started\n");
+    await pluginInstance.init({ id, version, rootURI });
+    dump("[PaperPilot] PaperPilot.init completed\n");
   } catch (e) {
-    dump("[PaperPilot] Fatal startup error: " + e + "\n" + (e.stack || "") + "\n");
+    dump(`[PaperPilot] Fatal startup error: ${e}\n${e.stack || ""}\n`);
     if (typeof Components !== "undefined") {
       Components.utils.reportError(e);
     }
+    throw e;
   }
 }
 

@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const JSZip = require("jszip");
 
-const isPackage = process.argv.includes("--package") || true;
+const isPackage = process.argv.includes("--package");
 
 function addDirectoryToZip(zip, folderPath, zipFolder) {
   if (!fs.existsSync(folderPath)) return;

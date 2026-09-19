@@ -6,13 +6,7 @@
   function getZotero() {
     if (typeof Zotero !== "undefined") return Zotero;
     if (typeof window !== "undefined" && window.Zotero) return window.Zotero;
-    try {
-      return Components.classes["@zotero.org/Zotero;1"].getService(Components.interfaces.zoteroI);
-    } catch (e) {}
-    try {
-      const Services = globalThis.Services || Components.classes["@mozilla.org/services/service;1"].getService(Components.interfaces.nsIServiceManager);
-      return Services.wm.getMostRecentWindow("navigator:browser")?.Zotero;
-    } catch (e) {}
+    dump("[PaperPilot Prefs] Error: Zotero global not found in preferences context\n");
     return null;
   }
 
@@ -133,18 +127,7 @@
             JSON.stringify(prefs),
             true
           );
-          dump("[PaperPilot Prefs] Preferences saved successfully to Zotero.Prefs.\n");
-
-          // Notify live plugin instance
-          if (
-            zotero.PaperPilot &&
-            typeof zotero.PaperPilot.reloadPreferences === "function"
-          ) {
-            zotero.PaperPilot.reloadPreferences();
-          }
           return true;
-        } else {
-          dump("[PaperPilot Prefs] Zotero.Prefs not accessible!\n");
         }
       } catch (e) {
         dump("[PaperPilot Prefs] Error saving preferences: " + e + "\n");
@@ -153,23 +136,24 @@
     },
 
     init(win) {
-      dump("[PaperPilot Prefs] Initializing preferences pane...\n");
       const doc = win?.document || (typeof document !== "undefined" ? document : null);
       if (!doc) {
-        dump("[PaperPilot Prefs] No document found, aborting init.\n");
+        dump("[PaperPilot Prefs] No document found for init.\n");
         return;
       }
 
       const saveBtn = doc.getElementById("pp-pref-btn-save");
       if (!saveBtn) {
-        dump("[PaperPilot Prefs] DOM not ready yet.\n");
         return;
       }
 
+      // Guard against double binding
       if (saveBtn.dataset.ppInitialized === "true") {
-        return; // Avoid double binding
+        return;
       }
       saveBtn.dataset.ppInitialized = "true";
+
+      dump("[PaperPilot Prefs] Initializing preferences pane controls...\n");
 
       let prefs = this.getPrefs();
 
@@ -193,6 +177,8 @@
       if (domainSelect) domainSelect.value = prefs.defaultDomain;
       if (customPromptArea) customPromptArea.value = prefs.customPromptTemplate;
 
+      let currentProviderKey = providerSelect ? providerSelect.value : "zhipu";
+
       const syncProviderUI = (providerKey) => {
         const cfg =
           prefs.aiProviders[providerKey] ||
@@ -203,25 +189,32 @@
         if (modelInput) modelInput.value = cfg.model || "";
       };
 
-      syncProviderUI(prefs.selectedAIProvider);
+      const saveCurrentFieldsToCache = (providerKey) => {
+        if (!prefs.aiProviders[providerKey]) {
+          prefs.aiProviders[providerKey] = {
+            ...(defaultProviders[providerKey] || defaultProviders.custom),
+          };
+        }
+        if (apiKeyInput) prefs.aiProviders[providerKey].apiKey = apiKeyInput.value.trim();
+        if (baseUrlInput) prefs.aiProviders[providerKey].baseUrl = baseUrlInput.value.trim();
+        if (modelInput) prefs.aiProviders[providerKey].model = modelInput.value.trim();
+      };
 
+      // Initial render for active provider
+      syncProviderUI(currentProviderKey);
+
+      // Prevent data loss when switching providers before saving
       providerSelect?.addEventListener("change", () => {
-        syncProviderUI(providerSelect.value);
+        saveCurrentFieldsToCache(currentProviderKey);
+        currentProviderKey = providerSelect.value;
+        syncProviderUI(currentProviderKey);
       });
 
+      // Save button click handler (closed-loop)
       saveBtn.addEventListener("click", () => {
-        dump("[PaperPilot Prefs] Save button clicked!\n");
-        const currentProviderKey = providerSelect ? providerSelect.value : "zhipu";
-        const currentConfig =
-          prefs.aiProviders[currentProviderKey] || {
-            ...defaultProviders[currentProviderKey],
-          };
+        dump("[PaperPilot Prefs] save requested\n");
 
-        if (apiKeyInput) currentConfig.apiKey = apiKeyInput.value.trim();
-        if (baseUrlInput) currentConfig.baseUrl = baseUrlInput.value.trim();
-        if (modelInput) currentConfig.model = modelInput.value.trim();
-
-        prefs.aiProviders[currentProviderKey] = currentConfig;
+        saveCurrentFieldsToCache(currentProviderKey);
         prefs.selectedAIProvider = currentProviderKey;
         if (transSelect) prefs.translationService = transSelect.value;
         if (targetLangSelect) prefs.targetLanguage = targetLangSelect.value;
@@ -231,18 +224,41 @@
 
         const success = PaperPilot_Preferences.savePrefs(prefs);
 
-        if (saveStatusLabel) {
-          saveStatusLabel.textContent = success
-            ? "✅ 配置已成功保存并实时生效！"
-            : "❌ 保存失败，请检查控制台";
-          saveStatusLabel.style.color = success ? "#16a34a" : "#dc2626";
-          saveStatusLabel.style.display = "inline";
-          setTimeout(() => {
-            saveStatusLabel.style.display = "none";
-          }, 3500);
+        if (success) {
+          // Immediately re-read pref to confirm persistence
+          const confirmed = PaperPilot_Preferences.getPrefs();
+          if (confirmed && confirmed.selectedAIProvider === prefs.selectedAIProvider) {
+            dump("[PaperPilot Prefs] persisted\n");
+          }
+
+          // Reload live instance preferences
+          const zotero = getZotero();
+          if (
+            zotero?.PaperPilot &&
+            typeof zotero.PaperPilot.reloadPreferences === "function"
+          ) {
+            zotero.PaperPilot.reloadPreferences();
+            dump("[PaperPilot Prefs] live preferences reloaded\n");
+          }
+
+          if (saveStatusLabel) {
+            saveStatusLabel.textContent = "✅ 配置已成功保存并实时生效！";
+            saveStatusLabel.style.color = "#16a34a";
+            saveStatusLabel.style.display = "inline";
+            setTimeout(() => {
+              saveStatusLabel.style.display = "none";
+            }, 3000);
+          }
+        } else {
+          if (saveStatusLabel) {
+            saveStatusLabel.textContent = "❌ 保存失败，请检查控制台";
+            saveStatusLabel.style.color = "#dc2626";
+            saveStatusLabel.style.display = "inline";
+          }
         }
       });
 
+      // Test API Connection handler
       testBtn?.addEventListener("click", async () => {
         if (testResultLabel) {
           testResultLabel.textContent = "⏳ 正在测试连接...";
@@ -299,7 +315,7 @@
     },
   };
 
-  // Expose to all scopes
+  // Expose globally
   if (typeof window !== "undefined") {
     window.PaperPilot_Preferences = PaperPilot_Preferences;
   }
@@ -313,29 +329,5 @@
     z.PaperPilot.onPrefsLoad = function (win) {
       PaperPilot_Preferences.init(win || (typeof window !== "undefined" ? window : null));
     };
-  }
-
-  // Auto-init watcher
-  function autoInit(retryCount) {
-    const win = typeof window !== "undefined" ? window : globalThis;
-    const doc = win?.document || (typeof document !== "undefined" ? document : null);
-    if (!doc) return;
-
-    const saveBtn = doc.getElementById("pp-pref-btn-save");
-    if (saveBtn) {
-      PaperPilot_Preferences.init(win);
-    } else if (retryCount < 40) {
-      setTimeout(() => autoInit(retryCount + 1), 80);
-    }
-  }
-
-  if (typeof window !== "undefined") {
-    if (window.document && window.document.readyState === "complete") {
-      autoInit(0);
-    } else if (window.addEventListener) {
-      window.addEventListener("DOMContentLoaded", () => autoInit(0));
-      window.addEventListener("load", () => autoInit(0));
-      setTimeout(() => autoInit(0), 100);
-    }
   }
 })();

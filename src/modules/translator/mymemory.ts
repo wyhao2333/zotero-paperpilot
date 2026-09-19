@@ -8,9 +8,19 @@ export class MyMemoryTranslator implements ITranslatorService {
     const trimmed = text.trim();
     if (!trimmed) return "";
 
-    const from = options.from || "en";
-    const to = options.to || "zh-CN";
-    const langPair = `${from}|${to}`;
+    const requestedTo = options.to || "zh-CN";
+
+    // Detect if selection is already predominantly Chinese
+    const containsChinese = /[\u4e00-\u9fa5]/.test(trimmed);
+    let targetLang = requestedTo;
+
+    // Prevent MyMemory error "PLEASE SELECT TWO DISTINCT LANGUAGES" if user selected Chinese text
+    if (containsChinese && (requestedTo === "zh-CN" || requestedTo === "zh-TW" || requestedTo === "zh")) {
+      targetLang = "en";
+    }
+
+    const fromLang = options.from || "autodetect";
+    const langPair = `${fromLang}|${targetLang}`;
 
     const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
       trimmed
@@ -27,17 +37,20 @@ export class MyMemoryTranslator implements ITranslatorService {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`MyMemory HTTP ${response.status}`);
+        throw new Error(`服务响应异常 (HTTP ${response.status})`);
       }
 
       const data = await response.json();
       if (data?.responseData?.translatedText) {
         return data.responseData.translatedText;
       }
-      throw new Error("Invalid response from MyMemory");
+      throw new Error("接口返回数据格式异常");
     } catch (e: any) {
       clearTimeout(timeoutId);
-      throw e;
+      if (e.name === "AbortError") {
+        throw new Error("MyMemory 翻译网络请求超时 (6s)");
+      }
+      throw new Error(`MyMemory 翻译失败: ${e.message || e}`);
     }
   }
 }

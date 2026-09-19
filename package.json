@@ -4,7 +4,8 @@
   "description": "Smart Selection Translation, AI Domain Interpretation & Full-text Copilot for Zotero 7-10",
   "main": "addon/index.js",
   "scripts": {
-    "build": "node esbuild.js",
+    "compile": "node esbuild.js",
+    "build": "node esbuild.js --package",
     "package": "node esbuild.js --package",
     "test": "node test/test-services.js"
   },

@@ -8,22 +8,24 @@ export class FloatingBarManager {
   private static activeFloatingBar: HTMLElement | null = null;
 
   /**
-   * 1. Official Zotero Reader selection popup hook
+   * 1. Official Zotero Reader selection popup hook (PRIMARY PATH)
    */
   static handleNativeSelectionPopup(event: any): void {
     try {
+      dump("[PaperPilot] native selection popup event received\n");
       const { reader, doc, params, append } = event;
       if (!doc) return;
 
+      // Primary source: params.annotation.text; Secondary fallback: reader.getSelectedText()
       const rawText =
         params?.annotation?.text ||
-        (reader?.getSelectedText ? reader.getSelectedText() : "") ||
+        (typeof reader?.getSelectedText === "function" ? reader.getSelectedText() : "") ||
         "";
       const cleanText = SelectionHelper.cleanPdfText(rawText);
 
       if (!cleanText || cleanText.length < 1) return;
 
-      dump(`[PaperPilot] Text selected: "${cleanText.slice(0, 30)}..."\n`);
+      dump(`[PaperPilot] native selection text received, length=${cleanText.length}\n`);
 
       // Remove any previously injected button group to always bind fresh selection
       const existing = doc.querySelector(".paperpilot-btn-group");
@@ -102,7 +104,7 @@ export class FloatingBarManager {
       btnGroup.appendChild(btnInterpret);
       btnGroup.appendChild(btnAsk);
 
-      // Append via Zotero API if available
+      // Append via official Zotero API
       if (typeof append === "function") {
         append(btnGroup);
       } else {
@@ -183,6 +185,8 @@ export class FloatingBarManager {
             return;
           }
 
+          dump(`[PaperPilot] fallback selection detected, length=${cleanText.length}\n`);
+
           if (this.activePopup && this.activePopup.contains(e.target as Node)) {
             return;
           }
@@ -210,6 +214,10 @@ export class FloatingBarManager {
   }
 
   static showStandaloneFloatingBar(doc: Document, rect: DOMRect, text: string): void {
+    // Only show if native popup does NOT already contain PaperPilot UI
+    if (doc.querySelector(".paperpilot-btn-group")) {
+      return;
+    }
     const nativePopup = doc.querySelector(".selection-popup");
     if (nativePopup && (nativePopup as HTMLElement).offsetWidth > 0) {
       return;
@@ -313,6 +321,7 @@ export class FloatingBarManager {
       </div>
     `;
 
+    // Append UI first - ensures UI appears regardless of network outcome
     doc.body.appendChild(popup);
     this.activePopup = popup;
 
@@ -340,9 +349,10 @@ export class FloatingBarManager {
 
       EventBus.emit("action:translated", { source: text, translated });
     } catch (err: any) {
+      // Clear human-readable error display - UI never vanishes
       const bodyEl = popup.querySelector("#pp-popup-body");
       if (bodyEl) {
-        bodyEl.textContent = `翻译失败: ${err.message || err}`;
+        bodyEl.innerHTML = `<span style="color: #dc2626; font-weight: 500;">❌ 翻译失败:</span> <span style="color: #64748b;">${err.message || err}</span>`;
       }
     }
   }

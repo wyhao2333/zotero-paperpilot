@@ -6,7 +6,26 @@ import { PaperPilotSidebarController } from "./modules/sidebar/controller";
 import { PromptManager } from "./modules/ai/prompts";
 import { DomainType } from "./types/zotero";
 
+function debugFileLog(msg: string): void {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  dump(line);
+  if (typeof Zotero !== "undefined" && typeof (Zotero as any).debug === "function") {
+    (Zotero as any).debug(`[PaperPilot] ${msg}`);
+  }
+  try {
+    const io = typeof IOUtils !== "undefined" ? IOUtils : (globalThis as any).IOUtils;
+    const path = typeof PathUtils !== "undefined" ? PathUtils : (globalThis as any).PathUtils;
+    if (io && path) {
+      const logPath = path.join(path.profileDir, "paperpilot_debug.log");
+      io.writeUTF8(logPath, line, { mode: "append" }).catch?.(() => {});
+    }
+  } catch (e) {}
+}
+
+
+
 export class PaperPilotPlugin {
+
   public id: string = "paperpilot@zotero.org";
   public rootURI: string = "";
   private initialized: boolean = false;
@@ -19,6 +38,7 @@ export class PaperPilotPlugin {
     if (this.initialized) return;
     this.initialized = true;
     this.rootURI = data?.rootURI || data?.resourceURI?.spec || "";
+    debugFileLog(`[PaperPilot] PaperPilotPlugin.init started with rootURI=${this.rootURI}`);
 
     PreferenceManager.init();
     PreferenceManager.registerObserver();
@@ -186,7 +206,9 @@ export class PaperPilotPlugin {
           `<html:style xmlns:html="http://www.w3.org/1999/xhtml">@import url("${this.rootURI}addon/style.css");</html:style>` +
           '<html:div xmlns:html="http://www.w3.org/1999/xhtml" id="paperpilot-sidebar-mount" style="min-height:420px; height:100%; display:flex; flex-direction:column;"></html:div>',
         onItemChange: ({ tabType, item, setEnabled }: any) => {
-          setEnabled(tabType === "reader");
+          const isReader = tabType === "reader";
+          setEnabled(isReader);
+          debugFileLog(`[PaperPilot] onItemChange tabType=${tabType} isReader=${isReader} itemID=${item?.id || item?.key}`);
           return true;
         },
         onRender: ({ body, item }: any) => {
@@ -206,16 +228,31 @@ export class PaperPilotPlugin {
           if (!tabID) {
             dump("[PaperPilot] ERROR: Cannot resolve tabID from item-details during PaperPilot onRender\n");
           }
-          const mount = body.querySelector("#paperpilot-sidebar-mount") || body;
+          const mount = (body.querySelector("#paperpilot-sidebar-mount") || body) as HTMLElement;
+          const hasDOM = !!mount.querySelector(".paperpilot-sidebar");
           let panel: SidebarPanel = (mount as any)._paperPilotPanel || (body as any)._paperPilotPanel;
-          if (!panel) {
+
+          debugFileLog(
+            `[PaperPilot] onRender tabID=${tabID} hasDOM=${hasDOM} panelExists=${!!panel} mountId=${mount?.id}`
+          );
+
+          if (!panel || !hasDOM) {
             try {
+              if (panel && typeof panel.destroy === "function") {
+                try {
+                  panel.destroy();
+                } catch (e) {}
+              }
               panel = new SidebarPanel(mount);
               (mount as any)._paperPilotPanel = panel;
               (body as any)._paperPilotPanel = panel;
               PaperPilotSidebarController.attachPanel(panel, { tabID, body, itemDetails, item, mount });
+              debugFileLog(`[PaperPilot] SidebarPanel constructed and bound successfully for tabID=${tabID}`);
               dump(`[PaperPilot] SidebarPanel constructed and bound successfully for tabID=${tabID}\n`);
             } catch (err: any) {
+              debugFileLog(
+                `[PaperPilot Sidebar] FATAL: Failed to construct SidebarPanel: ${err?.message || err}\n${err?.stack || ""}`
+              );
               dump(
                 `[PaperPilot Sidebar] FATAL: Failed to construct SidebarPanel: ${err?.message || err}\n${err?.stack || ""}\n`
               );
@@ -241,17 +278,36 @@ export class PaperPilotPlugin {
             }
             if (mount) delete (mount as any)._paperPilotPanel;
             delete (body as any)._paperPilotPanel;
+            debugFileLog(`[PaperPilot] item pane section destroyed for tabID=${tabID}`);
             dump(`[PaperPilot] item pane section destroyed for tabID=${tabID}\n`);
           } catch (e) {
             dump(`[PaperPilot] Error in section onDestroy: ${e}\n`);
           }
         },
         onAsyncRender: async ({ body, item }: any) => {
-          const panel: SidebarPanel = (body as any)._paperPilotPanel;
+          const mount = (body.querySelector("#paperpilot-sidebar-mount") || body) as HTMLElement;
+          let panel: SidebarPanel = (mount as any)?._paperPilotPanel || (body as any)?._paperPilotPanel;
+          const hasDOM = !!mount.querySelector?.(".paperpilot-sidebar");
+          const itemDetails = body.closest("item-details") as any;
+          const tabID = itemDetails?.tabID || itemDetails?.dataset?.tabId || "";
+
+          if (!panel || !hasDOM) {
+            try {
+              panel = new SidebarPanel(mount);
+              (mount as any)._paperPilotPanel = panel;
+              (body as any)._paperPilotPanel = panel;
+              PaperPilotSidebarController.attachPanel(panel, { tabID, body, itemDetails, item, mount });
+              debugFileLog(`[PaperPilot] onAsyncRender recovered SidebarPanel for tabID=${tabID}`);
+            } catch (err: any) {
+              debugFileLog(`[PaperPilot] onAsyncRender fallback construction error: ${err?.message || err}`);
+            }
+          }
+
           if (panel && item) {
             const regular = item.isRegularItem?.() ? item : item.parentItem || item;
             const title = regular?.getField ? regular.getField("title") : "文献";
             const attachment = item.isPDFAttachment?.() ? item : await regular?.getBestAttachment?.();
+            debugFileLog(`[PaperPilot] onAsyncRender loadPaper title="${title}" attachment=${attachment?.id}`);
             await panel.loadPaper(regular?.key || "", title, regular?.id || 0, attachment?.id);
           }
         },

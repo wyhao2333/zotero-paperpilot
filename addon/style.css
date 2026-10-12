@@ -560,3 +560,30 @@
   max-width: 100%;
   min-width: 0;
 }
+
+/* 4. Zotero 10 CollapsibleSection & Pane Sizing Guard */
+collapsible-section[data-pane="paperpilot-section"] {
+  --open-height: auto !important;
+}
+
+collapsible-section[data-pane="paperpilot-section"][open] > [data-type="body"],
+collapsible-section[data-pane="paperpilot-section"][open] > :not(.head) {
+  max-height: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 480px !important;
+  height: 100% !important;
+}
+
+#paperpilot-sidebar-mount {
+  min-height: 480px !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+}
+

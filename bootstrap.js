@@ -15,8 +15,22 @@ async function waitForZotero() {
   }
 }
 
+function bootLog(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  dump(line);
+  try {
+    if (typeof IOUtils !== "undefined" && typeof PathUtils !== "undefined") {
+      const logPath = PathUtils.join(PathUtils.profileDir, "paperpilot_debug.log");
+      IOUtils.writeUTF8(logPath, line, { mode: "append" }).catch?.(() => {});
+    }
+  } catch (e) {}
+}
+
 async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
+  bootLog("[PaperPilot] PaperPilot bootstrap started");
   dump("[PaperPilot] PaperPilot bootstrap started\n");
+
+
 
   // 1. Resolve & normalize addon rootURI
   let resolvedRoot = rootURI;
@@ -99,9 +113,12 @@ async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
       Zotero,
       Services,
       Components,
+      IOUtils: typeof IOUtils !== "undefined" ? IOUtils : undefined,
+      PathUtils: typeof PathUtils !== "undefined" ? PathUtils : undefined,
       dump,
       window: typeof window !== "undefined" ? window : undefined,
     };
+
     ctx._globalThis = ctx;
 
     Services.scriptloader.loadSubScript(scriptPath, ctx, "UTF-8");
@@ -119,14 +136,17 @@ async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
     dump("[PaperPilot] plugin instance found\n");
     dump("[PaperPilot] PaperPilot.init started\n");
     await pluginInstance.init({ id, version, rootURI });
+    bootLog("[PaperPilot] PaperPilot.init completed");
     dump("[PaperPilot] PaperPilot.init completed\n");
   } catch (e) {
+    bootLog(`[PaperPilot] Fatal startup error: ${e}\n${e.stack || ""}`);
     dump(`[PaperPilot] Fatal startup error: ${e}\n${e.stack || ""}\n`);
     if (typeof Components !== "undefined") {
       Components.utils.reportError(e);
     }
     throw e;
   }
+
 }
 
 async function onMainWindowLoad({ window }) {

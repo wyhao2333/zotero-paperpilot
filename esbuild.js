@@ -65,6 +65,12 @@ async function build() {
       addDirectoryToZip(zip, "chrome", chromeFolder);
     }
 
+    // 4. Add locale folder (Zotero 10 Fluent localization directory)
+    if (fs.existsSync("locale")) {
+      const localeFolder = zip.folder("locale");
+      addDirectoryToZip(zip, "locale", localeFolder);
+    }
+
     // Normalize all zip entry dates (including folders) for reproducible packaging
     for (const f of Object.values(zip.files)) {
       f.date = BUILD_DATE;
@@ -79,6 +85,10 @@ async function build() {
     const xpiPath = path.join("build", "zotero-paperpilot.xpi");
     fs.writeFileSync(xpiPath, content);
     console.log(`[PaperPilot] Successfully created XPI package: ${xpiPath} (${(content.length / 1024).toFixed(1)} KB)`);
+
+    const releaseXpiPath = path.join("build", "paperpilot-1.0.1.xpi");
+    fs.writeFileSync(releaseXpiPath, content);
+    console.log(`[PaperPilot] Successfully created release XPI: ${releaseXpiPath} (${(content.length / 1024).toFixed(1)} KB)`);
   }
 }
 

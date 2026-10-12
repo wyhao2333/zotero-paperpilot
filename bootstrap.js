@@ -49,8 +49,8 @@ async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
     const manifestURI = Services.io.newURI(rootURI + "manifest.json");
     chromeHandle = aomStartup.registerChrome(manifestURI, [
       ["content", "paperpilot", rootURI + "chrome/content/"],
-      ["locale", "paperpilot", "en-US", rootURI + "addon/locale/en-US/"],
-      ["locale", "paperpilot", "zh-CN", rootURI + "addon/locale/zh-CN/"],
+      ["locale", "paperpilot", "en-US", rootURI + "locale/en-US/"],
+      ["locale", "paperpilot", "zh-CN", rootURI + "locale/zh-CN/"],
     ]);
     dump("[PaperPilot] Chrome registered: chrome://paperpilot/content/ & locales\n");
   } catch (e) {

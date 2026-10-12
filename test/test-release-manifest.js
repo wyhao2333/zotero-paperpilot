@@ -80,4 +80,17 @@ assert.strictEqual(
 const manifestRaw = fs.readFileSync("manifest.json", "utf-8");
 assert(!manifestRaw.includes('"10.*"'), "manifest.json must not use legacy '10.*'");
 
+// Assert 11: root locale/ directory exists and contains standard FTL files
+assert(fs.existsSync("locale/en-US/paperpilot-mainWindow.ftl"), "locale/en-US/paperpilot-mainWindow.ftl must exist");
+assert(fs.existsSync("locale/zh-CN/paperpilot-mainWindow.ftl"), "locale/zh-CN/paperpilot-mainWindow.ftl must exist");
+const enFTL = fs.readFileSync("locale/en-US/paperpilot-mainWindow.ftl", "utf-8");
+const zhFTL = fs.readFileSync("locale/zh-CN/paperpilot-mainWindow.ftl", "utf-8");
+assert(enFTL.includes("paperpilot-item-pane-header"), "en-US FTL must define paperpilot-item-pane-header");
+assert(zhFTL.includes("paperpilot-item-pane-header"), "zh-CN FTL must define paperpilot-item-pane-header");
+assert(enFTL.includes("paperpilot-item-pane-sidenav"), "en-US FTL must define paperpilot-item-pane-sidenav");
+assert(zhFTL.includes("paperpilot-item-pane-sidenav"), "zh-CN FTL must define paperpilot-item-pane-sidenav");
+
+// Assert 12: legacy addon/locale must not exist
+assert(!fs.existsSync("addon/locale"), "addon/locale must not exist (Zotero 10 expects root locale/)");
+
 console.log("✅ All Release Manifest & Install Compatibility assertions PASSED.");

@@ -198,7 +198,7 @@
 }
 
 .paperpilot-header {
-  padding: var(--pp-pad) 12px;
+  padding: var(--pp-pad) 10px;
   border-bottom: 1px solid var(--pp-border);
   display: flex;
   justify-content: space-between;
@@ -206,6 +206,11 @@
   gap: var(--pp-gap);
   background: var(--pp-bg-secondary);
   flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  contain: inline-size;
 }
 
 .paperpilot-title {
@@ -214,17 +219,23 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
+  width: 0;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .paperpilot-paper-title {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
+  width: 0;
   min-width: 0;
-  max-width: none;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .paperpilot-header-actions {
@@ -233,24 +244,29 @@
   gap: 4px;
   flex-wrap: wrap;
   flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.paperpilot-sidebar.paperpilot-compact .paperpilot-header,
+.paperpilot-sidebar.paperpilot-narrow .paperpilot-header {
+  padding: 6px 8px;
+  gap: 4px;
+}
+
+.paperpilot-sidebar.paperpilot-compact .paperpilot-title,
+.paperpilot-sidebar.paperpilot-narrow .paperpilot-title {
+  flex: 1 1 100%;
+  width: 100%;
 }
 
 .paperpilot-sidebar.paperpilot-compact .paperpilot-header-actions,
 .paperpilot-sidebar.paperpilot-narrow .paperpilot-header-actions {
-  gap: 2px;
-}
-
-.paperpilot-sidebar.paperpilot-narrow .paperpilot-header {
+  flex: 1 1 100%;
+  width: 100%;
+  justify-content: flex-start;
   gap: 4px;
-}
-
-.paperpilot-sidebar.paperpilot-narrow .paperpilot-header-actions {
-  flex: 1 0 100%;
-  justify-content: flex-end;
-}
-
-.paperpilot-sidebar.paperpilot-narrow .paperpilot-btn .btn-text {
-  display: none;
 }
 
 .paperpilot-tabs {
@@ -258,10 +274,18 @@
   border-bottom: 1px solid var(--pp-border);
   background: var(--pp-bg-secondary);
   min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  contain: inline-size;
 }
 
 .paperpilot-tab-item {
-  flex: 1;
+  flex: 1 1 0%;
+  width: 0;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   text-align: center;
   padding: 8px 4px;
   font-size: var(--pp-font-btn);
@@ -270,7 +294,9 @@
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: all 0.2s;
-  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .paperpilot-tab-item.active {
@@ -282,11 +308,16 @@
 .paperpilot-tab-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--pp-pad);
   display: flex;
   flex-direction: column;
   gap: var(--pp-gap);
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
+  box-sizing: border-box;
+  contain: inline-size;
 }
 
 /* Session and Domain Rows */
@@ -294,25 +325,24 @@
 .paperpilot-domain-row {
   display: flex;
   align-items: center;
-  gap: var(--pp-gap);
+  gap: 4px;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
+  box-sizing: border-box;
+  flex-wrap: nowrap;
+  contain: inline-size;
 }
 
 .paperpilot-session-row select,
 .paperpilot-domain-row select {
-  min-width: 0;
-  max-width: 100%;
-  flex: 1 1 auto;
-  box-sizing: border-box;
-}
-
-.paperpilot-sidebar.paperpilot-narrow .paperpilot-session-row {
-  flex-wrap: wrap;
-}
-
-.paperpilot-sidebar.paperpilot-narrow .paperpilot-session-row select {
-  flex: 1 1 100%;
+  min-width: 0 !important;
+  width: 0 !important;
+  max-width: 100% !important;
+  flex: 1 1 0% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 /* 4. Chat Messages */
@@ -327,6 +357,8 @@
   flex-direction: column;
   gap: 12px;
   padding-right: 4px;
+  box-sizing: border-box;
+  contain: inline-size;
 }
 
 .paperpilot-msg,
@@ -507,8 +539,11 @@
   display: flex;
   flex-direction: column;
   gap: var(--pp-gap);
+  width: 100%;
   min-width: 0;
   max-width: 100%;
+  box-sizing: border-box;
+  contain: inline-size;
 }
 
 .paperpilot-textarea {
@@ -537,10 +572,26 @@
   justify-content: space-between;
   align-items: center;
   min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 6px;
+  contain: inline-size;
+}
+
+.paperpilot-context-caption {
+  font-size: 11px;
+  color: var(--pp-text-muted);
+  flex: 1 1 0%;
+  width: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .paperpilot-sidebar.paperpilot-narrow .paperpilot-toolbar-row {
-  flex-wrap: wrap;
   gap: 4px;
 }
 
@@ -562,12 +613,88 @@
 }
 
 /* 4. Zotero 10 CollapsibleSection & Pane Sizing Guard */
-collapsible-section[data-pane="paperpilot-section"] {
-  --open-height: auto !important;
+#zotero-context-pane-item-deck {
+  grid-template-columns: minmax(0, 1fr) !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
 }
 
+#zotero-context-pane-item-deck > item-details,
+item-details.zotero-item-pane-content {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+}
+
+item-details .zotero-view-item-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+item-details .zotero-view-item-main {
+  flex: 1 1 0% !important;
+  width: 0 !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+}
+
+item-details .zotero-view-item {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+}
+
+collapsible-section[data-pane*="paperpilot"],
+collapsible-section[data-pane="paperpilot-section"],
+item-pane-custom-section[data-pane*="paperpilot"] {
+  --open-height: auto !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  contain: inline-size !important;
+}
+
+item-pane-custom-section[data-pane*="paperpilot"] {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  min-height: 480px !important;
+  flex: 1 1 auto !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+  contain: inline-size !important;
+}
+
+collapsible-section[data-pane*="paperpilot"],
+collapsible-section[data-pane="paperpilot-section"] {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  min-height: 480px !important;
+  flex: 1 1 auto !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+  contain: inline-size !important;
+}
+
+collapsible-section[data-pane*="paperpilot"][open] > [data-type="body"],
+collapsible-section[data-pane*="paperpilot"][open] > :not(.head),
 collapsible-section[data-pane="paperpilot-section"][open] > [data-type="body"],
-collapsible-section[data-pane="paperpilot-section"][open] > :not(.head) {
+collapsible-section[data-pane="paperpilot-section"][open] > :not(.head),
+item-pane-custom-section[data-pane*="paperpilot"] [data-type="body"],
+[data-pane*="paperpilot"] > [data-type="body"] {
   max-height: none !important;
   opacity: 1 !important;
   visibility: visible !important;
@@ -576,6 +703,12 @@ collapsible-section[data-pane="paperpilot-section"][open] > :not(.head) {
   flex: 1 1 auto !important;
   min-height: 480px !important;
   height: 100% !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+  contain: inline-size !important;
 }
 
 #paperpilot-sidebar-mount {
@@ -585,5 +718,24 @@ collapsible-section[data-pane="paperpilot-section"][open] > :not(.head) {
   flex-direction: column !important;
   flex: 1 1 auto !important;
   width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+  contain: inline-size !important;
+}
+
+.paperpilot-sidebar {
+  min-height: 480px !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+  contain: inline-size !important;
 }
 

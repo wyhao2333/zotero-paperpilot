@@ -316,7 +316,7 @@ async function runStaticValidation() {
   // Check 23: Release Gate & Metadata Verification (Zotero 10 Only, Valid update_url, updates.json, MIT License)
   console.log("\n[Check 23] Verifying Release Metadata & Zotero 10 Compliance...");
   const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf-8"));
-  assert.strictEqual(manifest.version, "1.0.1", "manifest.json version must be 1.0.1");
+  assert.strictEqual(manifest.version, "1.0.2", "manifest.json version must be 1.0.2");
   assert.strictEqual(manifest.applications.zotero.id, "paperpilot@zotero.org", "id must be paperpilot@zotero.org");
   assert.strictEqual(manifest.applications.zotero.strict_min_version, "10.0", "strict_min_version must be 10.0");
   assert.strictEqual(manifest.applications.zotero.strict_max_version, "10.0.*", "strict_max_version must be 10.0.*");
@@ -328,18 +328,18 @@ async function runStaticValidation() {
   assert(updatesData.addons && updatesData.addons["paperpilot@zotero.org"], "updates.json must define paperpilot@zotero.org");
   const updateEntries = updatesData.addons["paperpilot@zotero.org"].updates;
   assert(Array.isArray(updateEntries) && updateEntries.length > 0, "updates must be array");
-  const v1Update = updateEntries.find((u) => u.version === "1.0.1");
-  assert(v1Update, "updates.json must contain version 1.0.1 entry");
+  const curUpdate = updateEntries.find((u) => u.version === manifest.version);
+  assert(curUpdate, `updates.json must contain version ${manifest.version} entry`);
   assert.strictEqual(
-    v1Update.update_link,
-    "https://github.com/wyhao2333/zotero-paperpilot/releases/download/v1.0.1/paperpilot-1.0.1.xpi",
+    curUpdate.update_link,
+    `https://github.com/wyhao2333/zotero-paperpilot/releases/download/v${manifest.version}/paperpilot-${manifest.version}.xpi`,
     "update_link must match release asset path"
   );
-  assert.strictEqual(v1Update.applications?.zotero?.strict_min_version, "10.0", "updates.json strict_min_version must be 10.0");
-  assert.strictEqual(v1Update.applications?.zotero?.strict_max_version, "10.0.*", "updates.json strict_max_version must be 10.0.*");
+  assert.strictEqual(curUpdate.applications?.zotero?.strict_min_version, "10.0", "updates.json strict_min_version must be 10.0");
+  assert.strictEqual(curUpdate.applications?.zotero?.strict_max_version, "10.0.*", "updates.json strict_max_version must be 10.0.*");
 
   const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8"));
-  assert.strictEqual(pkg.version, "1.0.1", "package.json version must be 1.0.1");
+  assert.strictEqual(pkg.version, manifest.version, "package.json version must match manifest.json");
   assert(!pkg.keywords.includes("zotero-7"), "package.json keywords must not contain zotero-7");
   assert(pkg.keywords.includes("zotero-10"), "package.json keywords must contain zotero-10");
 

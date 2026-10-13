@@ -30,13 +30,15 @@ function parseMarkupToFragment(doc: Document, markup: string): DocumentFragment 
     `<html:div xmlns:html="${HTML_NS}">${markup}</html:div>`,
     "application/xml"
   );
-  let fragment = doc.createDocumentFragment();
-  const rootNode = parsedDoc.documentElement?.firstChild || parsedDoc.documentElement;
-  if (rootNode) {
-    fragment.appendChild(rootNode);
+  let fragment: DocumentFragment = doc.createDocumentFragment();
+  const children = Array.from(parsedDoc.documentElement?.childNodes || []);
+  for (const child of children) {
+    fragment.appendChild(child);
   }
   if (fragment.ownerDocument !== doc && typeof doc.importNode === "function") {
-    fragment = doc.importNode(fragment, true) as DocumentFragment;
+    try {
+      fragment = doc.importNode(fragment, true) as DocumentFragment;
+    } catch (e) {}
   }
   return fragment;
 }

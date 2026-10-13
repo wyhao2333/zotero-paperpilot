@@ -1,6 +1,6 @@
 {
   "name": "zotero-paperpilot",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Academic reading assistant with translation, AI interpretation, PDF chat and paper digest for Zotero 10",
   "main": "addon/index.js",
   "scripts": {

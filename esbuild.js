@@ -4,7 +4,7 @@ const path = require("path");
 const JSZip = require("jszip");
 
 const isPackage = process.argv.includes("--package");
-const BUILD_DATE = new Date("2026-09-19T00:00:00Z");
+const BUILD_DATE = new Date();
 
 function addDirectoryToZip(zip, folderPath, zipFolder) {
   if (!fs.existsSync(folderPath)) return;
@@ -28,6 +28,12 @@ async function build() {
   if (!fs.existsSync("chrome/content/scripts")) fs.mkdirSync("chrome/content/scripts", { recursive: true });
   if (!fs.existsSync("build")) fs.mkdirSync("build", { recursive: true });
 
+  // Copy style.css and icon.svg to chrome/content/ for chrome:// URI accessibility
+  if (fs.existsSync("addon/style.css")) fs.copyFileSync("addon/style.css", "chrome/content/style.css");
+  if (fs.existsSync("addon/icon.svg")) fs.copyFileSync("addon/icon.svg", "chrome/content/icon.svg");
+
+  const sidebarCss = fs.existsSync("addon/style.css") ? fs.readFileSync("addon/style.css", "utf8") : "";
+
   await esbuild.build({
     entryPoints: ["src/index.ts"],
     bundle: true,
@@ -39,6 +45,7 @@ async function build() {
     external: ["ChromeUtils", "Services", "Zotero"],
     define: {
       "process.env.NODE_ENV": '"production"',
+      "__PAPERPILOT_SIDEBAR_CSS__": JSON.stringify(sidebarCss),
     },
   });
 
@@ -86,7 +93,9 @@ async function build() {
     fs.writeFileSync(xpiPath, content);
     console.log(`[PaperPilot] Successfully created XPI package: ${xpiPath} (${(content.length / 1024).toFixed(1)} KB)`);
 
-    const releaseXpiPath = path.join("build", "paperpilot-1.0.1.xpi");
+    const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf-8"));
+    const version = manifest.version || "1.0.2";
+    const releaseXpiPath = path.join("build", `paperpilot-${version}.xpi`);
     fs.writeFileSync(releaseXpiPath, content);
     console.log(`[PaperPilot] Successfully created release XPI: ${releaseXpiPath} (${(content.length / 1024).toFixed(1)} KB)`);
   }

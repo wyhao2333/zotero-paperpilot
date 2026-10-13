@@ -7,7 +7,11 @@ dist/
 addon/index.js
 addon/index.js.map
 chrome/content/scripts/
+chrome/content/style.css
+chrome/content/icon.svg
 *.xpi
+*.zip
+ANNA_APP/
 
 # OS / Editor files
 .DS_Store

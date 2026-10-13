@@ -6,23 +6,10 @@ import { PaperPilotSidebarController } from "./modules/sidebar/controller";
 import { PromptManager } from "./modules/ai/prompts";
 import { DomainType } from "./types/zotero";
 
-function debugFileLog(msg: string): void {
-  const line = `[${new Date().toISOString()}] ${msg}\n`;
-  dump(line);
-  if (typeof Zotero !== "undefined" && typeof (Zotero as any).debug === "function") {
-    (Zotero as any).debug(`[PaperPilot] ${msg}`);
-  }
-  try {
-    const io = typeof IOUtils !== "undefined" ? IOUtils : (globalThis as any).IOUtils;
-    const path = typeof PathUtils !== "undefined" ? PathUtils : (globalThis as any).PathUtils;
-    if (io && path) {
-      const logPath = path.join(path.profileDir, "paperpilot_debug.log");
-      io.writeUTF8(logPath, line, { mode: "append" }).catch?.(() => {});
-    }
-  } catch (e) {}
-}
+import { debugFileLog } from "./core/logger";
+export { debugFileLog };
 
-
+declare const __PAPERPILOT_SIDEBAR_CSS__: string;
 
 export class PaperPilotPlugin {
 
@@ -195,33 +182,46 @@ export class PaperPilotPlugin {
         pluginID: this.id,
         header: {
           l10nID: "paperpilot-item-pane-header",
-          icon: `${this.rootURI}addon/icon.svg`,
+          l10nArgs: JSON.stringify({ count: 1 }),
+          icon: "chrome://paperpilot/content/icon.svg",
         },
         sidenav: {
           l10nID: "paperpilot-item-pane-sidenav",
-          icon: `${this.rootURI}addon/icon.svg`,
+          icon: "chrome://paperpilot/content/icon.svg",
           orderable: false,
         },
         bodyXHTML:
-          `<html:style xmlns:html="http://www.w3.org/1999/xhtml">@import url("${this.rootURI}addon/style.css");</html:style>` +
-          '<html:div xmlns:html="http://www.w3.org/1999/xhtml" id="paperpilot-sidebar-mount" style="min-height:420px; height:100%; display:flex; flex-direction:column;"></html:div>',
+          '<html:div xmlns:html="http://www.w3.org/1999/xhtml" id="paperpilot-sidebar-mount" style="min-height:480px; height:100%; width:100%; max-width:100%; min-width:0; box-sizing:border-box; overflow-x:hidden; contain:inline-size; display:flex; flex-direction:column;"></html:div>',
         onItemChange: ({ tabType, item, setEnabled }: any) => {
-          const isReader = tabType === "reader";
+          const isReader = tabType === "reader" || !tabType;
           setEnabled(isReader);
           debugFileLog(`[PaperPilot] onItemChange tabType=${tabType} isReader=${isReader} itemID=${item?.id || item?.key}`);
           return true;
         },
         onRender: ({ body, item }: any) => {
-          // Self-contained stylesheet injection into pane container
-          if (!body.querySelector("style[data-paperpilot-style]")) {
-            try {
-              const doc = body.ownerDocument;
-              const style = doc.createElementNS("http://www.w3.org/1999/xhtml", "style");
+          // 1. Force parent collapsible-section into open, non-empty state & constrain ancestor chain
+          this.enforceAncestorResponsiveBounds(body);
+
+          // 2. Self-contained stylesheet injection into pane container (always keep textContent up-to-date)
+          try {
+            const doc = body.ownerDocument;
+            let style = body.querySelector("style[data-paperpilot-style]");
+            if (!style) {
+              style = doc.createElementNS("http://www.w3.org/1999/xhtml", "style");
               style.setAttribute("data-paperpilot-style", "true");
-              style.textContent = `@import url("${this.rootURI}addon/style.css");`;
               body.insertBefore(style, body.firstChild);
-            } catch (e) {}
-          }
+            }
+            const cssText = typeof __PAPERPILOT_SIDEBAR_CSS__ !== "undefined"
+              ? __PAPERPILOT_SIDEBAR_CSS__
+              : `@import url("${this.rootURI}addon/style.css");`;
+            if (style.textContent !== cssText) {
+              style.textContent = cssText;
+            }
+          } catch (e) {}
+
+          try {
+            body.style.cssText = "min-height: 480px !important; height: 100% !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; overflow-x: hidden !important; contain: inline-size !important; display: flex !important; flex-direction: column !important; visibility: visible !important; opacity: 1 !important;";
+          } catch (e) {}
 
           const itemDetails = body.closest("item-details") as any;
           const tabID = itemDetails?.tabID || itemDetails?.dataset?.tabId || "";
@@ -229,11 +229,14 @@ export class PaperPilotPlugin {
             dump("[PaperPilot] ERROR: Cannot resolve tabID from item-details during PaperPilot onRender\n");
           }
           const mount = (body.querySelector("#paperpilot-sidebar-mount") || body) as HTMLElement;
+          if (mount) {
+            mount.style.cssText = "min-height: 480px !important; height: 100% !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; overflow-x: hidden !important; contain: inline-size !important; flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; visibility: visible !important; opacity: 1 !important;";
+          }
           const hasDOM = !!mount.querySelector(".paperpilot-sidebar");
           let panel: SidebarPanel = (mount as any)._paperPilotPanel || (body as any)._paperPilotPanel;
 
           debugFileLog(
-            `[PaperPilot] onRender tabID=${tabID} hasDOM=${hasDOM} panelExists=${!!panel} mountId=${mount?.id}`
+            `[PaperPilot] onRender tabID=${tabID} hasDOM=${hasDOM} panelExists=${!!panel} mountId=${mount?.id} itemDetailsW=${itemDetails?.clientWidth} mountW=${mount?.clientWidth}`
           );
 
           if (!panel || !hasDOM) {
@@ -247,7 +250,7 @@ export class PaperPilotPlugin {
               (mount as any)._paperPilotPanel = panel;
               (body as any)._paperPilotPanel = panel;
               PaperPilotSidebarController.attachPanel(panel, { tabID, body, itemDetails, item, mount });
-              debugFileLog(`[PaperPilot] SidebarPanel constructed and bound successfully for tabID=${tabID}`);
+              debugFileLog(`[PaperPilot] SidebarPanel constructed and bound successfully for tabID=${tabID} mountW=${mount?.clientWidth}`);
               dump(`[PaperPilot] SidebarPanel constructed and bound successfully for tabID=${tabID}\n`);
             } catch (err: any) {
               debugFileLog(
@@ -285,6 +288,8 @@ export class PaperPilotPlugin {
           }
         },
         onAsyncRender: async ({ body, item }: any) => {
+          this.enforceAncestorResponsiveBounds(body);
+
           const mount = (body.querySelector("#paperpilot-sidebar-mount") || body) as HTMLElement;
           let panel: SidebarPanel = (mount as any)?._paperPilotPanel || (body as any)?._paperPilotPanel;
           const hasDOM = !!mount.querySelector?.(".paperpilot-sidebar");
@@ -304,11 +309,15 @@ export class PaperPilotPlugin {
           }
 
           if (panel && item) {
-            const regular = item.isRegularItem?.() ? item : item.parentItem || item;
-            const title = regular?.getField ? regular.getField("title") : "文献";
-            const attachment = item.isPDFAttachment?.() ? item : await regular?.getBestAttachment?.();
-            debugFileLog(`[PaperPilot] onAsyncRender loadPaper title="${title}" attachment=${attachment?.id}`);
-            await panel.loadPaper(regular?.key || "", title, regular?.id || 0, attachment?.id);
+            try {
+              const regular = item.isRegularItem?.() ? item : item.parentItem || item;
+              const title = regular?.getField ? regular.getField("title") : "文献";
+              const attachment = item.isPDFAttachment?.() ? item : await regular?.getBestAttachment?.();
+              debugFileLog(`[PaperPilot] onAsyncRender loadPaper title="${title}" attachment=${attachment?.id} itemDetailsW=${itemDetails?.clientWidth} mountW=${mount?.clientWidth}`);
+              await panel.loadPaper(regular?.key || "", title, regular?.id || 0, attachment?.id);
+            } catch (loadErr: any) {
+              debugFileLog(`[PaperPilot] onAsyncRender loadPaper warning: ${loadErr?.message || loadErr}`);
+            }
           }
         },
       });
@@ -323,6 +332,85 @@ export class PaperPilotPlugin {
       dump(`[PaperPilot] item pane section registered: ${key}\n`);
     } catch (e) {
       dump(`[PaperPilot] Failed to register ItemPane section: ${e}\n`);
+    }
+  }
+
+  private enforceAncestorResponsiveBounds(body: any): void {
+    if (!body) return;
+    try {
+      const section = body?.closest?.("collapsible-section") || body?.parentElement;
+      if (section) {
+        if (typeof section.empty !== "undefined") section.empty = false;
+        section.removeAttribute?.("empty");
+        if (typeof section.open !== "undefined") section.open = true;
+        section.setAttribute?.("open", "");
+        section.style?.setProperty?.("--open-height", "auto", "important");
+        section.style?.setProperty?.("width", "100%", "important");
+        section.style?.setProperty?.("max-width", "100%", "important");
+        section.style?.setProperty?.("min-width", "0", "important");
+        section.style?.setProperty?.("box-sizing", "border-box", "important");
+        section.style?.setProperty?.("overflow-x", "hidden", "important");
+        section.style?.setProperty?.("contain", "inline-size", "important");
+        const twisty = section.querySelector?.(".twisty");
+        if (twisty) {
+          twisty.hidden = false;
+          twisty.removeAttribute?.("hidden");
+        }
+      }
+
+      const customSection = body?.closest?.("item-pane-custom-section");
+      if (customSection) {
+        customSection.style?.setProperty?.("width", "100%", "important");
+        customSection.style?.setProperty?.("max-width", "100%", "important");
+        customSection.style?.setProperty?.("min-width", "0", "important");
+        customSection.style?.setProperty?.("box-sizing", "border-box", "important");
+        customSection.style?.setProperty?.("overflow-x", "hidden", "important");
+        customSection.style?.setProperty?.("contain", "inline-size", "important");
+      }
+
+      const viewItem = body?.closest?.(".zotero-view-item");
+      if (viewItem) {
+        viewItem.style?.setProperty?.("width", "100%", "important");
+        viewItem.style?.setProperty?.("max-width", "100%", "important");
+        viewItem.style?.setProperty?.("min-width", "0", "important");
+        viewItem.style?.setProperty?.("box-sizing", "border-box", "important");
+        viewItem.style?.setProperty?.("overflow-x", "hidden", "important");
+      }
+
+      const viewItemMain = body?.closest?.(".zotero-view-item-main");
+      if (viewItemMain) {
+        viewItemMain.style?.setProperty?.("flex", "1 1 0%", "important");
+        viewItemMain.style?.setProperty?.("width", "0", "important");
+        viewItemMain.style?.setProperty?.("max-width", "100%", "important");
+        viewItemMain.style?.setProperty?.("min-width", "0", "important");
+        viewItemMain.style?.setProperty?.("box-sizing", "border-box", "important");
+        viewItemMain.style?.setProperty?.("overflow-x", "hidden", "important");
+      }
+
+      const viewItemContainer = body?.closest?.(".zotero-view-item-container");
+      if (viewItemContainer) {
+        viewItemContainer.style?.setProperty?.("width", "100%", "important");
+        viewItemContainer.style?.setProperty?.("max-width", "100%", "important");
+        viewItemContainer.style?.setProperty?.("min-width", "0", "important");
+        viewItemContainer.style?.setProperty?.("box-sizing", "border-box", "important");
+      }
+
+      const itemDetails = body?.closest?.("item-details");
+      if (itemDetails) {
+        itemDetails.style?.setProperty?.("width", "100%", "important");
+        itemDetails.style?.setProperty?.("max-width", "100%", "important");
+        itemDetails.style?.setProperty?.("min-width", "0", "important");
+        itemDetails.style?.setProperty?.("box-sizing", "border-box", "important");
+        itemDetails.style?.setProperty?.("overflow-x", "hidden", "important");
+        const itemDeck = itemDetails.parentElement;
+        if (itemDeck && itemDeck.id === "zotero-context-pane-item-deck") {
+          itemDeck.style?.setProperty?.("grid-template-columns", "minmax(0, 1fr)", "important");
+          itemDeck.style?.setProperty?.("min-width", "0", "important");
+          itemDeck.style?.setProperty?.("max-width", "100%", "important");
+        }
+      }
+    } catch (e) {
+      dump(`[PaperPilot] Error enforcing ancestor responsive bounds: ${e}\n`);
     }
   }
 

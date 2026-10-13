@@ -16,18 +16,17 @@ async function waitForZotero() {
 }
 
 function bootLog(msg) {
-  const line = `[${new Date().toISOString()}] ${msg}\n`;
-  dump(line);
+  const line = `[${new Date().toISOString()}] ${msg}`;
+  dump(line + "\n");
   try {
-    if (typeof IOUtils !== "undefined" && typeof PathUtils !== "undefined") {
-      const logPath = PathUtils.join(PathUtils.profileDir, "paperpilot_debug.log");
-      IOUtils.writeUTF8(logPath, line, { mode: "append" }).catch?.(() => {});
+    if (typeof Zotero !== "undefined" && Zotero.debug) {
+      Zotero.debug("[PaperPilot] " + msg);
     }
   } catch (e) {}
 }
 
 async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
-  bootLog("[PaperPilot] PaperPilot bootstrap started");
+  bootLog(`[PaperPilot] PaperPilot bootstrap started (v1.0.2, version=${version || "1.0.2"})`);
   dump("[PaperPilot] PaperPilot bootstrap started\n");
 
 
@@ -121,6 +120,10 @@ async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
 
     ctx._globalThis = ctx;
 
+    try {
+      Services.obs.notifyObservers(null, "startupcache-invalidate");
+    } catch (e) {}
+
     Services.scriptloader.loadSubScript(scriptPath, ctx, "UTF-8");
     dump("[PaperPilot] main bundle loaded\n");
 
@@ -150,6 +153,7 @@ async function startup({ id, version, resourceURI, rootURI } = {}, reason) {
 }
 
 async function onMainWindowLoad({ window }) {
+  bootLog("[PaperPilot] bootstrap.onMainWindowLoad called");
   try {
     try {
       window.MozXULElement?.insertFTLIfNeeded?.("paperpilot-mainWindow.ftl");
@@ -160,6 +164,7 @@ async function onMainWindowLoad({ window }) {
       await pluginInstance.onMainWindowLoad(window);
     }
   } catch (e) {
+    bootLog("[PaperPilot] onMainWindowLoad error: " + e + "\n" + (e.stack || ""));
     dump("[PaperPilot] onMainWindowLoad error: " + e + "\n");
   }
 }

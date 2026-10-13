@@ -58,12 +58,12 @@ assert(Array.isArray(updateList) && updateList.length > 0, "updates list must be
 // Assert 8: updates.json version = manifest version
 const targetUpdate = updateList.find((u) => u.version === manifest.version);
 assert(targetUpdate, `updates.json must contain an entry for version ${manifest.version}`);
-assert.strictEqual(targetUpdate.version, "1.0.1", "version must be 1.0.1");
+assert.strictEqual(targetUpdate.version, manifest.version, `version must match manifest.version`);
 
-// Assert 9: update_link file name matches paperpilot-1.0.1.xpi
+// Assert 9: update_link file name matches paperpilot-${manifest.version}.xpi
 assert(
-  targetUpdate.update_link && targetUpdate.update_link.endsWith("paperpilot-1.0.1.xpi"),
-  "update_link must point to paperpilot-1.0.1.xpi"
+  targetUpdate.update_link && targetUpdate.update_link.endsWith(`paperpilot-${manifest.version}.xpi`),
+  `update_link must point to paperpilot-${manifest.version}.xpi`
 );
 assert.strictEqual(
   targetUpdate.applications?.zotero?.strict_min_version,
